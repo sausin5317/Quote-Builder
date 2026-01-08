@@ -123,9 +123,9 @@ async function seedDatabase() {
         unloadTime: cleanRate(record["unload"]),
         minTons: cleanRate(record["MT"]),
         chainsFee: cleanRate(record["chains"]),
-        driverTargetPay: cleanRate(record["Target Bizi"]),
-        ownerOperatorBiziPay: cleanRate(record["Target o/o"]),
-        ownerOperatorOwnPay: cleanRate(record["o/o Own"])
+        driverTargetPay: cleanRate(record["Target Bizi"] || record["Target  Pay"]),
+        ownerOperatorBiziPay: cleanRate(record["Target o/o"] || record["o/o Hourly"]),
+        ownerOperatorOwnPay: cleanRate(record["o/o Own"] || record["o/o Hourly"])
       });
     } catch (e) {
       console.error("Failed to insert record:", e);
