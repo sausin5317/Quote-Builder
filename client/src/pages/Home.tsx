@@ -2,72 +2,28 @@ import { Layout } from "@/components/ui/Layout";
 import { LaneSelector } from "@/components/calculator/LaneSelector";
 import { CalculatorForm } from "@/components/calculator/CalculatorForm";
 import { useState } from "react";
-import { Lane, Client } from "@shared/schema";
-import { Calculator, Building2 } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Label } from "@/components/ui/label";
+import { Lane } from "@shared/schema";
+import { Calculator } from "lucide-react";
 
 export default function Home() {
   const [selectedLane, setSelectedLane] = useState<Lane | null>(null);
-  const [selectedClientId, setSelectedClientId] = useState<number | null>(null);
-  
-  const { data: clients } = useQuery<Client[]>({
-    queryKey: ['/api/clients'],
-  });
-
-  const handleClientChange = (value: string) => {
-    if (value === "all") {
-      setSelectedClientId(null);
-    } else {
-      setSelectedClientId(parseInt(value));
-    }
-    // Reset lane selection when client changes
-    setSelectedLane(null);
-  };
 
   return (
     <Layout>
       <div className="flex flex-col h-[calc(100vh-8rem)] lg:h-[calc(100vh-6rem)] gap-6">
         
+        {/* Mobile: Lane selector opens in drawer or modal, Desktop: Side-by-side */}
         <div className="flex flex-col lg:flex-row gap-6 h-full">
           
-          <div className="w-full lg:w-80 lg:shrink-0 flex flex-col gap-4">
-            <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-200">
-              <Label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 block">
-                <Building2 className="w-3 h-3 inline mr-1" />
-                Filter by Client
-              </Label>
-              <Select value={selectedClientId?.toString() || "all"} onValueChange={handleClientChange}>
-                <SelectTrigger className="w-full" data-testid="select-filter-client">
-                  <SelectValue placeholder="All Clients" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Clients</SelectItem>
-                  {clients?.map(client => (
-                    <SelectItem key={client.id} value={client.id.toString()}>
-                      {client.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            
-            <div className="flex-1 h-64 lg:h-auto">
-              <LaneSelector 
-                selectedLaneId={selectedLane?.id || null} 
-                onSelectLane={setSelectedLane}
-                clientId={selectedClientId}
-              />
-            </div>
+          {/* Left Panel: Lane List */}
+          <div className="w-full lg:w-80 lg:shrink-0 h-64 lg:h-full">
+            <LaneSelector 
+              selectedLaneId={selectedLane?.id || null} 
+              onSelectLane={setSelectedLane} 
+            />
           </div>
 
+          {/* Main Area: Calculator */}
           <div className="flex-1 h-full overflow-y-auto pr-2 pb-10">
             {selectedLane ? (
               <div className="animate-fade-in">

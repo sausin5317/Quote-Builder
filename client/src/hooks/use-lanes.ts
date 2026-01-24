@@ -1,14 +1,11 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, buildUrl } from "@shared/routes";
 
-export function useLanes(clientId?: number | null) {
+export function useLanes() {
   return useQuery({
-    queryKey: clientId ? ['/api/lanes/client', clientId] : [api.lanes.list.path],
+    queryKey: [api.lanes.list.path],
     queryFn: async () => {
-      const url = clientId 
-        ? buildUrl(api.lanes.listByClient.path, { clientId })
-        : api.lanes.list.path;
-      const res = await fetch(url, { credentials: "include" });
+      const res = await fetch(api.lanes.list.path, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch lanes");
       return api.lanes.list.responses[200].parse(await res.json());
     },

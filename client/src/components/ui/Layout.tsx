@@ -6,9 +6,7 @@ import {
   Settings, 
   Truck, 
   Menu,
-  X,
-  LayoutDashboard,
-  Building2
+  X
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -22,9 +20,7 @@ export function Layout({ children }: LayoutProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const navItems = [
-    { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard" },
     { icon: Calculator, label: "Quote Calculator", href: "/" },
-    { icon: Building2, label: "Clients", href: "/clients" },
     { icon: History, label: "History", href: "/history" },
     { icon: Truck, label: "Lanes", href: "/lanes" },
     { icon: Settings, label: "Settings", href: "/settings" },
