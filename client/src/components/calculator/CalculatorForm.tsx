@@ -1,13 +1,23 @@
 import { useState, useEffect } from "react";
-import { Lane, InsertQuote } from "@shared/schema";
+import { Lane, InsertQuote, Client } from "@shared/schema";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Clock, DollarSign, Fuel, Truck, Save, FileText, Send } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
+import { Clock, DollarSign, Fuel, Truck, Save, FileText, Send, Plus, CheckCircle } from "lucide-react";
 import { useCreateQuote } from "@/hooks/use-quotes";
 import { useToast } from "@/hooks/use-toast";
+import { useQuery } from "@tanstack/react-query";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface CalculatorFormProps {
   lane: Lane;
@@ -17,7 +27,10 @@ export function CalculatorForm({ lane }: CalculatorFormProps) {
   const { toast } = useToast();
   const createQuote = useCreateQuote();
   
-  // State for form values (initialized with lane defaults)
+  const { data: clients } = useQuery<Client[]>({
+    queryKey: ['/api/clients'],
+  });
+  
   const [values, setValues] = useState({
     distance: lane.distance,
     speed: lane.speed,
@@ -25,23 +38,26 @@ export function CalculatorForm({ lane }: CalculatorFormProps) {
     unloadTime: lane.unloadTime,
     standbyTime: "0",
     mtPerLoad: lane.minTons,
+    isRoundTrip: true,
     
-    // Rates
     driveRate: lane.ratePerHour,
     loadRate: lane.ratePerHour,
     unloadRate: lane.ratePerHour,
     fuelSurcharge: lane.fuelSurcharge,
     chainsFee: lane.chainsFee,
+    miscCharges: "0",
+    miscChargesDescription: "",
     
-    // Targets
     driverTarget: lane.driverTargetPay,
     ooBiziTarget: lane.ownerOperatorBiziPay,
     ooOwnTarget: lane.ownerOperatorOwnPay,
 
     customerName: "",
+    clientId: "",
+    originOverride: "",
+    destinationOverride: "",
   });
 
-  // Reset form when lane changes
   useEffect(() => {
     setValues({
       distance: lane.distance,
@@ -50,26 +66,31 @@ export function CalculatorForm({ lane }: CalculatorFormProps) {
       unloadTime: lane.unloadTime,
       standbyTime: "0",
       mtPerLoad: lane.minTons,
+      isRoundTrip: true,
       
       driveRate: lane.ratePerHour,
       loadRate: lane.ratePerHour,
       unloadRate: lane.ratePerHour,
       fuelSurcharge: lane.fuelSurcharge,
       chainsFee: lane.chainsFee,
+      miscCharges: "0",
+      miscChargesDescription: "",
       
       driverTarget: lane.driverTargetPay,
       ooBiziTarget: lane.ownerOperatorBiziPay,
       ooOwnTarget: lane.ownerOperatorOwnPay,
       
       customerName: "",
+      clientId: "",
+      originOverride: "",
+      destinationOverride: "",
     });
   }, [lane]);
 
-  const handleChange = (key: string, value: string) => {
+  const handleChange = (key: string, value: string | boolean) => {
     setValues(prev => ({ ...prev, [key]: value }));
   };
 
-  // --- Calculations ---
   const distance = parseFloat(values.distance || "0");
   const speed = parseFloat(values.speed || "1");
   const loadTime = parseFloat(values.loadTime || "0");
@@ -78,57 +99,69 @@ export function CalculatorForm({ lane }: CalculatorFormProps) {
   const driveRate = parseFloat(values.driveRate || "0");
   const fuelSurchargePercent = parseFloat(values.fuelSurcharge || "0");
   const chainsFee = parseFloat(values.chainsFee || "0");
+  const miscCharges = parseFloat(values.miscCharges || "0");
   const mtPerLoad = parseFloat(values.mtPerLoad || "1");
   
-  // Formulas
-  const driveHours = (distance * 2) / speed;
+  const distanceMultiplier = values.isRoundTrip ? 2 : 1;
+  const driveHours = (distance * distanceMultiplier) / speed;
   const totalHours = driveHours + loadTime + unloadTime + standbyTime;
   const baseRevenue = totalHours * driveRate;
   const fuelRevenue = baseRevenue * (fuelSurchargePercent / 100);
-  const totalTripPrice = baseRevenue + fuelRevenue + chainsFee;
+  const totalTripPrice = baseRevenue + fuelRevenue + chainsFee + miscCharges;
 
-  // Margin
   const driverTarget = parseFloat(values.driverTarget || "0");
   const driverPay = totalHours * driverTarget;
   const margin = totalTripPrice - driverPay;
   const hourlyMargin = totalHours > 0 ? margin / totalHours : 0;
+  const ratePerTon = mtPerLoad > 0 ? totalTripPrice / mtPerLoad : 0;
 
-  const handleSave = async () => {
-    if (!values.customerName) {
+  const handleSave = async (status: string = "Draft") => {
+    if (!values.customerName && !values.clientId) {
       toast({
-        title: "Missing Customer Name",
-        description: "Please enter a customer name to save this quote.",
+        title: "Missing Customer Info",
+        description: "Please select a client or enter a customer name.",
         variant: "destructive",
       });
       return;
     }
 
+    const selectedClient = clients?.find(c => c.id.toString() === values.clientId);
+
     try {
       await createQuote.mutateAsync({
         laneId: lane.id,
-        customerName: values.customerName,
-        status: "Draft",
+        clientId: values.clientId ? parseInt(values.clientId) : null,
+        customerName: values.customerName || selectedClient?.name || "",
+        status,
         distance: values.distance,
         speed: values.speed,
         loadTime: values.loadTime,
         unloadTime: values.unloadTime,
         standbyTime: values.standbyTime,
         mtPerLoad: values.mtPerLoad,
+        isRoundTrip: values.isRoundTrip,
         driveRate: values.driveRate,
         loadRate: values.loadRate,
         unloadRate: values.unloadRate,
         fuelSurcharge: values.fuelSurcharge,
         chainsFee: values.chainsFee,
+        miscCharges: values.miscCharges,
+        miscChargesDescription: values.miscChargesDescription || null,
         driverTarget: values.driverTarget,
         ooBiziTarget: values.ooBiziTarget,
         ooOwnTarget: values.ooOwnTarget,
         totalHours: totalHours.toFixed(2),
         totalCost: totalTripPrice.toFixed(2),
+        ratePerTon: ratePerTon.toFixed(2),
+        originOverride: values.originOverride || null,
+        destinationOverride: values.destinationOverride || null,
       });
       
       toast({
-        title: "Quote Saved",
-        description: `Draft for ${values.customerName} saved successfully.`,
+        title: status === "Pending Review" ? "Quote Submitted" : "Quote Saved",
+        description: status === "Pending Review" 
+          ? "Quote has been submitted for review."
+          : `Draft for ${values.customerName || selectedClient?.name} saved successfully.`,
       });
     } catch (error) {
       toast({
@@ -146,24 +179,47 @@ export function CalculatorForm({ lane }: CalculatorFormProps) {
           <div>
             <div className="text-xs font-bold text-blue-400 uppercase tracking-widest mb-1">Active Lane</div>
             <h2 className="text-2xl font-display font-bold">
-              {lane.origin} <span className="text-slate-500 mx-2">→</span> {lane.destination}
+              {values.originOverride || lane.origin} <span className="text-slate-500 mx-2">→</span> {values.destinationOverride || lane.destination}
             </h2>
-            <div className="flex gap-3 mt-3">
+            <div className="flex gap-3 mt-3 flex-wrap">
               <span className="bg-blue-500/10 text-blue-400 text-xs px-2.5 py-1 rounded border border-blue-500/20 font-bold uppercase">{lane.product}</span>
               <span className="bg-slate-800 text-slate-300 text-xs px-2.5 py-1 rounded border border-slate-700 flex items-center gap-1 font-mono">
                 <Truck className="w-3 h-3" /> {lane.distance} KM
               </span>
+              {values.isRoundTrip && (
+                <span className="bg-emerald-500/10 text-emerald-400 text-xs px-2.5 py-1 rounded border border-emerald-500/20 font-bold uppercase">Round Trip</span>
+              )}
             </div>
           </div>
           
-          <div className="w-full md:w-auto bg-slate-800/50 p-4 rounded-lg border border-slate-700">
-            <Label className="text-[10px] font-bold text-slate-400 mb-2 block uppercase tracking-wider">Customer Name</Label>
-            <Input 
-              placeholder="Enter Customer Name..." 
-              className="md:w-64 bg-slate-900 border-slate-700 text-white h-9 text-sm focus:ring-blue-500/20" 
-              value={values.customerName}
-              onChange={(e) => handleChange("customerName", e.target.value)}
-            />
+          <div className="w-full md:w-auto space-y-3">
+            <div className="bg-slate-800/50 p-3 rounded-lg border border-slate-700">
+              <Label className="text-[10px] font-bold text-slate-400 mb-1.5 block uppercase tracking-wider">Client</Label>
+              <Select value={values.clientId} onValueChange={(v) => handleChange("clientId", v)}>
+                <SelectTrigger className="bg-slate-900 border-slate-700 text-white h-9 text-sm w-full md:w-64" data-testid="select-client">
+                  <SelectValue placeholder="Select a client..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {clients?.map(client => (
+                    <SelectItem key={client.id} value={client.id.toString()}>
+                      {client.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {!values.clientId && (
+              <div className="bg-slate-800/50 p-3 rounded-lg border border-slate-700">
+                <Label className="text-[10px] font-bold text-slate-400 mb-1.5 block uppercase tracking-wider">Or Customer Name</Label>
+                <Input 
+                  placeholder="Enter Customer Name..." 
+                  className="bg-slate-900 border-slate-700 text-white h-9 text-sm w-full md:w-64" 
+                  value={values.customerName}
+                  onChange={(e) => handleChange("customerName", e.target.value)}
+                  data-testid="input-customer-name"
+                />
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -172,34 +228,45 @@ export function CalculatorForm({ lane }: CalculatorFormProps) {
         <div className="lg:col-span-8 space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <Card className="p-5 shadow-sm border-slate-200">
-              <div className="flex items-center gap-2 mb-5 text-slate-800 font-bold text-sm uppercase tracking-tight">
-                <Clock className="w-4 h-4 text-blue-600" />
-                <h3>Trip & Time</h3>
+              <div className="flex items-center justify-between mb-5">
+                <div className="flex items-center gap-2 text-slate-800 font-bold text-sm uppercase tracking-tight">
+                  <Clock className="w-4 h-4 text-blue-600" />
+                  <h3>Trip & Time</h3>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="round-trip" className="text-xs text-slate-500">Round Trip</Label>
+                  <Switch 
+                    id="round-trip" 
+                    checked={values.isRoundTrip} 
+                    onCheckedChange={(v) => handleChange("isRoundTrip", v)}
+                    data-testid="switch-round-trip"
+                  />
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <Label className="text-xs text-slate-500 font-semibold">KM (One-Way)</Label>
-                  <Input className="h-9 text-sm font-mono" type="number" value={values.distance} onChange={(e) => handleChange("distance", e.target.value)} />
+                  <Input className="h-9 text-sm font-mono" type="number" value={values.distance} onChange={(e) => handleChange("distance", e.target.value)} data-testid="input-distance" />
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs text-slate-500 font-semibold">Speed (KM/H)</Label>
-                  <Input className="h-9 text-sm font-mono" type="number" value={values.speed} onChange={(e) => handleChange("speed", e.target.value)} />
+                  <Input className="h-9 text-sm font-mono" type="number" value={values.speed} onChange={(e) => handleChange("speed", e.target.value)} data-testid="input-speed" />
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs text-slate-500 font-semibold">Load Hours</Label>
-                  <Input className="h-9 text-sm font-mono" type="number" value={values.loadTime} onChange={(e) => handleChange("loadTime", e.target.value)} />
+                  <Input className="h-9 text-sm font-mono" type="number" value={values.loadTime} onChange={(e) => handleChange("loadTime", e.target.value)} data-testid="input-load-time" />
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs text-slate-500 font-semibold">Unload Hours</Label>
-                  <Input className="h-9 text-sm font-mono" type="number" value={values.unloadTime} onChange={(e) => handleChange("unloadTime", e.target.value)} />
+                  <Input className="h-9 text-sm font-mono" type="number" value={values.unloadTime} onChange={(e) => handleChange("unloadTime", e.target.value)} data-testid="input-unload-time" />
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs text-slate-500 font-semibold">Standby Hours</Label>
-                  <Input className="h-9 text-sm font-mono" type="number" value={values.standbyTime} onChange={(e) => handleChange("standbyTime", e.target.value)} />
+                  <Input className="h-9 text-sm font-mono" type="number" value={values.standbyTime} onChange={(e) => handleChange("standbyTime", e.target.value)} data-testid="input-standby-time" />
                 </div>
                  <div className="space-y-1.5">
                   <Label className="text-xs text-slate-500 font-semibold">MT Per Load</Label>
-                  <Input className="h-9 text-sm font-mono" type="number" value={values.mtPerLoad} onChange={(e) => handleChange("mtPerLoad", e.target.value)} />
+                  <Input className="h-9 text-sm font-mono" type="number" value={values.mtPerLoad} onChange={(e) => handleChange("mtPerLoad", e.target.value)} data-testid="input-mt-per-load" />
                 </div>
               </div>
             </Card>
@@ -214,14 +281,14 @@ export function CalculatorForm({ lane }: CalculatorFormProps) {
                   <Label className="text-xs text-slate-500 font-semibold">Drive Rate ($/HR)</Label>
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs">$</span>
-                    <Input className="pl-6 h-9 text-sm font-mono" type="number" value={values.driveRate} onChange={(e) => handleChange("driveRate", e.target.value)} />
+                    <Input className="pl-6 h-9 text-sm font-mono" type="number" value={values.driveRate} onChange={(e) => handleChange("driveRate", e.target.value)} data-testid="input-drive-rate" />
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1.5">
                     <Label className="text-xs text-slate-500 font-semibold">Fuel Surcharge (%)</Label>
                     <div className="relative">
-                      <Input className="h-9 text-sm font-mono" type="number" value={values.fuelSurcharge} onChange={(e) => handleChange("fuelSurcharge", e.target.value)} />
+                      <Input className="h-9 text-sm font-mono" type="number" value={values.fuelSurcharge} onChange={(e) => handleChange("fuelSurcharge", e.target.value)} data-testid="input-fuel-surcharge" />
                       <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400">%</span>
                     </div>
                   </div>
@@ -229,10 +296,30 @@ export function CalculatorForm({ lane }: CalculatorFormProps) {
                     <Label className="text-xs text-slate-500 font-semibold">Chains Fee ($)</Label>
                     <div className="relative">
                       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs">$</span>
-                      <Input className="pl-6 h-9 text-sm font-mono" type="number" value={values.chainsFee} onChange={(e) => handleChange("chainsFee", e.target.value)} />
+                      <Input className="pl-6 h-9 text-sm font-mono" type="number" value={values.chainsFee} onChange={(e) => handleChange("chainsFee", e.target.value)} data-testid="input-chains-fee" />
                     </div>
                   </div>
                 </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-slate-500 font-semibold">Misc Charges ($)</Label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs">$</span>
+                    <Input className="pl-6 h-9 text-sm font-mono" type="number" value={values.miscCharges} onChange={(e) => handleChange("miscCharges", e.target.value)} data-testid="input-misc-charges" />
+                  </div>
+                </div>
+                {parseFloat(values.miscCharges) > 0 && (
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-slate-500 font-semibold">Misc Description</Label>
+                    <Textarea 
+                      placeholder="Describe additional charges..." 
+                      className="text-sm resize-none"
+                      rows={2}
+                      value={values.miscChargesDescription}
+                      onChange={(e) => handleChange("miscChargesDescription", e.target.value)}
+                      data-testid="input-misc-description"
+                    />
+                  </div>
+                )}
               </div>
             </Card>
           </div>
@@ -247,22 +334,51 @@ export function CalculatorForm({ lane }: CalculatorFormProps) {
                 <Label className="text-xs text-slate-500 font-semibold">Driver Target ($/HR)</Label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs">$</span>
-                  <Input className="pl-6 h-9 text-sm font-mono" type="number" value={values.driverTarget} onChange={(e) => handleChange("driverTarget", e.target.value)} />
+                  <Input className="pl-6 h-9 text-sm font-mono" type="number" value={values.driverTarget} onChange={(e) => handleChange("driverTarget", e.target.value)} data-testid="input-driver-target" />
                 </div>
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs text-slate-500 font-semibold">O/O Bizi Target ($/HR)</Label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs">$</span>
-                  <Input className="pl-6 h-9 text-sm font-mono" type="number" value={values.ooBiziTarget} onChange={(e) => handleChange("ooBiziTarget", e.target.value)} />
+                  <Input className="pl-6 h-9 text-sm font-mono" type="number" value={values.ooBiziTarget} onChange={(e) => handleChange("ooBiziTarget", e.target.value)} data-testid="input-oo-bizi-target" />
                 </div>
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs text-slate-500 font-semibold">O/O Own Target ($/HR)</Label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs">$</span>
-                  <Input className="pl-6 h-9 text-sm font-mono" type="number" value={values.ooOwnTarget} onChange={(e) => handleChange("ooOwnTarget", e.target.value)} />
+                  <Input className="pl-6 h-9 text-sm font-mono" type="number" value={values.ooOwnTarget} onChange={(e) => handleChange("ooOwnTarget", e.target.value)} data-testid="input-oo-own-target" />
                 </div>
+              </div>
+            </div>
+          </Card>
+
+          <Card className="p-5 shadow-sm border-slate-200">
+            <div className="flex items-center gap-2 mb-5 text-slate-800 font-bold text-sm uppercase tracking-tight">
+              <Plus className="w-4 h-4 text-blue-600" />
+              <h3>Location Overrides (Optional)</h3>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-1.5">
+                <Label className="text-xs text-slate-500 font-semibold">Origin Override</Label>
+                <Input 
+                  className="h-9 text-sm" 
+                  placeholder={lane.origin}
+                  value={values.originOverride} 
+                  onChange={(e) => handleChange("originOverride", e.target.value)} 
+                  data-testid="input-origin-override"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs text-slate-500 font-semibold">Destination Override</Label>
+                <Input 
+                  className="h-9 text-sm" 
+                  placeholder={lane.destination}
+                  value={values.destinationOverride} 
+                  onChange={(e) => handleChange("destinationOverride", e.target.value)} 
+                  data-testid="input-destination-override"
+                />
               </div>
             </div>
           </Card>
@@ -279,7 +395,7 @@ export function CalculatorForm({ lane }: CalculatorFormProps) {
             <div className="space-y-6">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <div className="text-[10px] text-slate-500 font-bold uppercase mb-1">Drive Hours (RT)</div>
+                  <div className="text-[10px] text-slate-500 font-bold uppercase mb-1">Drive Hours {values.isRoundTrip ? "(RT)" : "(1-way)"}</div>
                   <div className="text-xl font-mono font-bold">{driveHours.toFixed(1)}</div>
                 </div>
                 <div>
@@ -301,30 +417,46 @@ export function CalculatorForm({ lane }: CalculatorFormProps) {
                   <span>Chains Fee</span>
                   <span className="font-mono text-amber-500">+${chainsFee.toFixed(2)}</span>
                 </div>
+                {miscCharges > 0 && (
+                  <div className="flex justify-between items-center text-xs text-slate-400">
+                    <span>Misc Charges</span>
+                    <span className="font-mono text-amber-500">+${miscCharges.toFixed(2)}</span>
+                  </div>
+                )}
                 <Separator className="bg-slate-700/50" />
                 <div className="flex justify-between items-end pt-2">
                   <div className="text-[10px] text-slate-500 font-bold uppercase">All-in $/Trip</div>
-                  <div className="text-3xl font-mono font-bold text-emerald-400">${totalTripPrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
+                  <div className="text-3xl font-mono font-bold text-emerald-400" data-testid="text-total-price">${totalTripPrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
                 </div>
-                <div className="text-[10px] text-right text-slate-500 font-bold uppercase">
-                  ${(totalTripPrice / mtPerLoad).toFixed(2)} per MT
+                <div className="text-[10px] text-right text-slate-500 font-bold uppercase" data-testid="text-rate-per-ton">
+                  ${ratePerTon.toFixed(2)} per MT
                 </div>
               </div>
 
               <div className="pt-4 space-y-3">
                 <Button 
                   className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold h-10 text-xs uppercase tracking-widest"
-                  onClick={handleSave}
+                  onClick={() => handleSave("Draft")}
                   disabled={createQuote.isPending}
+                  data-testid="button-save-draft"
                 >
                   <Save className="mr-2 w-4 h-4" />
                   {createQuote.isPending ? "Saving..." : "Save Draft"}
                 </Button>
+                <Button 
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-10 text-xs uppercase tracking-widest"
+                  onClick={() => handleSave("Pending Review")}
+                  disabled={createQuote.isPending}
+                  data-testid="button-submit-review"
+                >
+                  <CheckCircle className="mr-2 w-4 h-4" />
+                  Submit for Review
+                </Button>
                 <div className="grid grid-cols-2 gap-2">
-                  <Button variant="outline" className="bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700 text-[10px] font-bold h-9 uppercase">
+                  <Button variant="outline" className="bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700 text-[10px] font-bold h-9 uppercase" data-testid="button-export-pdf">
                     <FileText className="mr-2 w-3 h-3" /> PDF
                   </Button>
-                  <Button variant="outline" className="bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700 text-[10px] font-bold h-9 uppercase">
+                  <Button variant="outline" className="bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700 text-[10px] font-bold h-9 uppercase" data-testid="button-send-email">
                     <Send className="mr-2 w-3 h-3" /> Email
                   </Button>
                 </div>
@@ -338,7 +470,7 @@ export function CalculatorForm({ lane }: CalculatorFormProps) {
                 <div>
                   <div className="flex justify-between text-xs mb-1.5">
                     <span className="text-slate-600 font-medium">Hourly Margin</span>
-                    <span className={`font-mono font-bold ${hourlyMargin > 180 ? 'text-emerald-600' : 'text-amber-600'}`}>
+                    <span className={`font-mono font-bold ${hourlyMargin > 180 ? 'text-emerald-600' : 'text-amber-600'}`} data-testid="text-hourly-margin">
                       ${hourlyMargin.toFixed(2)}/HR
                     </span>
                   </div>
