@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { jsPDF } from "jspdf";
 import { Lane, InsertQuote, Client } from "@shared/schema";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,6 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { LocationSearchInput } from "@/components/ui/start-location-search";
 
 interface CalculatorFormProps {
   lane: Lane;
@@ -26,11 +28,11 @@ interface CalculatorFormProps {
 export function CalculatorForm({ lane }: CalculatorFormProps) {
   const { toast } = useToast();
   const createQuote = useCreateQuote();
-  
+
   const { data: clients } = useQuery<Client[]>({
     queryKey: ['/api/clients'],
   });
-  
+
   const [values, setValues] = useState({
     distance: lane.distance,
     speed: lane.speed,
@@ -39,23 +41,23 @@ export function CalculatorForm({ lane }: CalculatorFormProps) {
     standbyTime: "0",
     mtPerLoad: lane.minTons,
     isRoundTrip: true,
-    
-    driveRate: lane.ratePerHour,
-    loadRate: lane.ratePerHour,
-    unloadRate: lane.ratePerHour,
-    fuelSurcharge: lane.fuelSurcharge,
-    chainsFee: lane.chainsFee,
+
+    driveRate: lane.ratePerHour || "0",
+    loadRate: lane.ratePerHour || "0",
+    unloadRate: lane.ratePerHour || "0",
+    fuelSurcharge: lane.fuelSurcharge || "0",
+    chainsFee: lane.chainsFee || "0",
     miscCharges: "0",
     miscChargesDescription: "",
-    
-    driverTarget: lane.driverTargetPay,
-    ooBiziTarget: lane.ownerOperatorBiziPay,
-    ooOwnTarget: lane.ownerOperatorOwnPay,
+
+    driverTarget: lane.driverTargetPay || "0",
+    ooBiziTarget: lane.ownerOperatorBiziPay || "0",
+    ooOwnTarget: lane.ownerOperatorOwnPay || "0",
 
     customerName: "",
     clientId: "",
-    originOverride: "",
-    destinationOverride: "",
+    originOverride: lane.origin,
+    destinationOverride: lane.destination,
   });
 
   useEffect(() => {
@@ -67,23 +69,23 @@ export function CalculatorForm({ lane }: CalculatorFormProps) {
       standbyTime: "0",
       mtPerLoad: lane.minTons,
       isRoundTrip: true,
-      
-      driveRate: lane.ratePerHour,
-      loadRate: lane.ratePerHour,
-      unloadRate: lane.ratePerHour,
-      fuelSurcharge: lane.fuelSurcharge,
-      chainsFee: lane.chainsFee,
+
+      driveRate: lane.ratePerHour || "0",
+      loadRate: lane.ratePerHour || "0",
+      unloadRate: lane.ratePerHour || "0",
+      fuelSurcharge: lane.fuelSurcharge || "0",
+      chainsFee: lane.chainsFee || "0",
       miscCharges: "0",
       miscChargesDescription: "",
-      
-      driverTarget: lane.driverTargetPay,
-      ooBiziTarget: lane.ownerOperatorBiziPay,
-      ooOwnTarget: lane.ownerOperatorOwnPay,
-      
+
+      driverTarget: lane.driverTargetPay || "0",
+      ooBiziTarget: lane.ownerOperatorBiziPay || "0",
+      ooOwnTarget: lane.ownerOperatorOwnPay || "0",
+
       customerName: "",
       clientId: "",
-      originOverride: "",
-      destinationOverride: "",
+      originOverride: lane.origin,
+      destinationOverride: lane.destination,
     });
   }, [lane]);
 
@@ -101,7 +103,7 @@ export function CalculatorForm({ lane }: CalculatorFormProps) {
   const chainsFee = parseFloat(values.chainsFee || "0");
   const miscCharges = parseFloat(values.miscCharges || "0");
   const mtPerLoad = parseFloat(values.mtPerLoad || "1");
-  
+
   const distanceMultiplier = values.isRoundTrip ? 2 : 1;
   const driveHours = (distance * distanceMultiplier) / speed;
   const totalHours = driveHours + loadTime + unloadTime + standbyTime;
@@ -156,10 +158,10 @@ export function CalculatorForm({ lane }: CalculatorFormProps) {
         originOverride: values.originOverride || null,
         destinationOverride: values.destinationOverride || null,
       });
-      
+
       toast({
         title: status === "Pending Review" ? "Quote Submitted" : "Quote Saved",
-        description: status === "Pending Review" 
+        description: status === "Pending Review"
           ? "Quote has been submitted for review."
           : `Draft for ${values.customerName || selectedClient?.name} saved successfully.`,
       });
@@ -177,10 +179,28 @@ export function CalculatorForm({ lane }: CalculatorFormProps) {
       <div className="bg-[#0f172a] text-white rounded-xl p-6 shadow-md border border-slate-800">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
-            <div className="text-xs font-bold text-blue-400 uppercase tracking-widest mb-1">Active Lane</div>
-            <h2 className="text-2xl font-display font-bold">
-              {values.originOverride || lane.origin} <span className="text-slate-500 mx-2">→</span> {values.destinationOverride || lane.destination}
-            </h2>
+
+            <div className="flex flex-col md:flex-row items-center gap-3">
+              <div className="flex-1">
+                <Label className="text-[10px] text-blue-400 font-bold uppercase tracking-widest mb-1.5 block">Origin Override</Label>
+                <LocationSearchInput
+                  className="bg-slate-900 border-slate-700 text-white font-display font-bold text-lg h-10 w-full"
+                  placeholder={lane.origin}
+                  value={values.originOverride}
+                  onChange={(v) => handleChange("originOverride", v)}
+                />
+              </div>
+              <span className="text-slate-500 mx-2 mt-6">→</span>
+              <div className="flex-1">
+                <Label className="text-[10px] text-blue-400 font-bold uppercase tracking-widest mb-1.5 block">Destination Override</Label>
+                <LocationSearchInput
+                  className="bg-slate-900 border-slate-700 text-white font-display font-bold text-lg h-10 w-full"
+                  placeholder={lane.destination}
+                  value={values.destinationOverride}
+                  onChange={(v) => handleChange("destinationOverride", v)}
+                />
+              </div>
+            </div>
             <div className="flex gap-3 mt-3 flex-wrap">
               <span className="bg-blue-500/10 text-blue-400 text-xs px-2.5 py-1 rounded border border-blue-500/20 font-bold uppercase">{lane.product}</span>
               <span className="bg-slate-800 text-slate-300 text-xs px-2.5 py-1 rounded border border-slate-700 flex items-center gap-1 font-mono">
@@ -191,7 +211,7 @@ export function CalculatorForm({ lane }: CalculatorFormProps) {
               )}
             </div>
           </div>
-          
+
           <div className="w-full md:w-auto space-y-3">
             <div className="bg-slate-800/50 p-3 rounded-lg border border-slate-700">
               <Label className="text-[10px] font-bold text-slate-400 mb-1.5 block uppercase tracking-wider">Client</Label>
@@ -211,9 +231,9 @@ export function CalculatorForm({ lane }: CalculatorFormProps) {
             {!values.clientId && (
               <div className="bg-slate-800/50 p-3 rounded-lg border border-slate-700">
                 <Label className="text-[10px] font-bold text-slate-400 mb-1.5 block uppercase tracking-wider">Or Customer Name</Label>
-                <Input 
-                  placeholder="Enter Customer Name..." 
-                  className="bg-slate-900 border-slate-700 text-white h-9 text-sm w-full md:w-64" 
+                <Input
+                  placeholder="Enter Customer Name..."
+                  className="bg-slate-900 border-slate-700 text-white h-9 text-sm w-full md:w-64"
                   value={values.customerName}
                   onChange={(e) => handleChange("customerName", e.target.value)}
                   data-testid="input-customer-name"
@@ -235,9 +255,9 @@ export function CalculatorForm({ lane }: CalculatorFormProps) {
                 </div>
                 <div className="flex items-center gap-2">
                   <Label htmlFor="round-trip" className="text-xs text-slate-500">Round Trip</Label>
-                  <Switch 
-                    id="round-trip" 
-                    checked={values.isRoundTrip} 
+                  <Switch
+                    id="round-trip"
+                    checked={values.isRoundTrip}
                     onCheckedChange={(v) => handleChange("isRoundTrip", v)}
                     data-testid="switch-round-trip"
                   />
@@ -264,7 +284,7 @@ export function CalculatorForm({ lane }: CalculatorFormProps) {
                   <Label className="text-xs text-slate-500 font-semibold">Standby Hours</Label>
                   <Input className="h-9 text-sm font-mono" type="number" value={values.standbyTime} onChange={(e) => handleChange("standbyTime", e.target.value)} data-testid="input-standby-time" />
                 </div>
-                 <div className="space-y-1.5">
+                <div className="space-y-1.5">
                   <Label className="text-xs text-slate-500 font-semibold">MT Per Load</Label>
                   <Input className="h-9 text-sm font-mono" type="number" value={values.mtPerLoad} onChange={(e) => handleChange("mtPerLoad", e.target.value)} data-testid="input-mt-per-load" />
                 </div>
@@ -292,7 +312,7 @@ export function CalculatorForm({ lane }: CalculatorFormProps) {
                       <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400">%</span>
                     </div>
                   </div>
-                   <div className="space-y-1.5">
+                  <div className="space-y-1.5">
                     <Label className="text-xs text-slate-500 font-semibold">Chains Fee ($)</Label>
                     <div className="relative">
                       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs">$</span>
@@ -310,8 +330,8 @@ export function CalculatorForm({ lane }: CalculatorFormProps) {
                 {parseFloat(values.miscCharges) > 0 && (
                   <div className="space-y-1.5">
                     <Label className="text-xs text-slate-500 font-semibold">Misc Description</Label>
-                    <Textarea 
-                      placeholder="Describe additional charges..." 
+                    <Textarea
+                      placeholder="Describe additional charges..."
                       className="text-sm resize-none"
                       rows={2}
                       value={values.miscChargesDescription}
@@ -354,34 +374,7 @@ export function CalculatorForm({ lane }: CalculatorFormProps) {
             </div>
           </Card>
 
-          <Card className="p-5 shadow-sm border-slate-200">
-            <div className="flex items-center gap-2 mb-5 text-slate-800 font-bold text-sm uppercase tracking-tight">
-              <Plus className="w-4 h-4 text-blue-600" />
-              <h3>Location Overrides (Optional)</h3>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-1.5">
-                <Label className="text-xs text-slate-500 font-semibold">Origin Override</Label>
-                <Input 
-                  className="h-9 text-sm" 
-                  placeholder={lane.origin}
-                  value={values.originOverride} 
-                  onChange={(e) => handleChange("originOverride", e.target.value)} 
-                  data-testid="input-origin-override"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs text-slate-500 font-semibold">Destination Override</Label>
-                <Input 
-                  className="h-9 text-sm" 
-                  placeholder={lane.destination}
-                  value={values.destinationOverride} 
-                  onChange={(e) => handleChange("destinationOverride", e.target.value)} 
-                  data-testid="input-destination-override"
-                />
-              </div>
-            </div>
-          </Card>
+
         </div>
 
         <div className="lg:col-span-4 space-y-6">
@@ -389,9 +382,9 @@ export function CalculatorForm({ lane }: CalculatorFormProps) {
             <div className="absolute top-0 right-0 p-4 opacity-5">
               <DollarSign className="w-24 h-24" />
             </div>
-            
+
             <h3 className="text-slate-400 font-bold text-[10px] uppercase tracking-[0.2em] mb-6">Quote Summary</h3>
-            
+
             <div className="space-y-6">
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -434,7 +427,7 @@ export function CalculatorForm({ lane }: CalculatorFormProps) {
               </div>
 
               <div className="pt-4 space-y-3">
-                <Button 
+                <Button
                   className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold h-10 text-xs uppercase tracking-widest"
                   onClick={() => handleSave("Draft")}
                   disabled={createQuote.isPending}
@@ -443,7 +436,7 @@ export function CalculatorForm({ lane }: CalculatorFormProps) {
                   <Save className="mr-2 w-4 h-4" />
                   {createQuote.isPending ? "Saving..." : "Save Draft"}
                 </Button>
-                <Button 
+                <Button
                   className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-10 text-xs uppercase tracking-widest"
                   onClick={() => handleSave("Pending Review")}
                   disabled={createQuote.isPending}
@@ -453,10 +446,37 @@ export function CalculatorForm({ lane }: CalculatorFormProps) {
                   Submit for Review
                 </Button>
                 <div className="grid grid-cols-2 gap-2">
-                  <Button variant="outline" className="bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700 text-[10px] font-bold h-9 uppercase" data-testid="button-export-pdf">
+                  <Button
+                    variant="outline"
+                    className="bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700 text-[10px] font-bold h-9 uppercase"
+                    data-testid="button-export-pdf"
+                    onClick={() => {
+                      const origin = values.originOverride || lane.origin;
+                      const destination = values.destinationOverride || lane.destination;
+                      const doc = new jsPDF();
+                      doc.text("Quote Summary", 10, 10);
+                      doc.text(`Customer: ${values.customerName || "N/A"}`, 10, 20);
+                      doc.text(`Lane: ${origin} -> ${destination}`, 10, 30);
+                      doc.text(`Total Cost: $${totalTripPrice.toFixed(2)}`, 10, 40);
+                      doc.save("quote.pdf");
+                    }}
+                  >
                     <FileText className="mr-2 w-3 h-3" /> PDF
                   </Button>
-                  <Button variant="outline" className="bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700 text-[10px] font-bold h-9 uppercase" data-testid="button-send-email">
+                  <Button
+                    variant="outline"
+                    className="bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700 text-[10px] font-bold h-9 uppercase"
+                    data-testid="button-send-email"
+                    onClick={() => {
+                      const origin = values.originOverride || lane.origin;
+                      const destination = values.destinationOverride || lane.destination;
+                      const subject = encodeURIComponent(`Quote for ${values.customerName}`);
+                      const body = encodeURIComponent(
+                        `Quote Summary:\n\nCustomer: ${values.customerName}\nLane: ${origin} to ${destination}\nTotal Cost: $${totalTripPrice.toFixed(2)}\n\nPlease review attached details.`
+                      );
+                      window.location.href = `mailto:?subject=${subject}&body=${body}`;
+                    }}
+                  >
                     <Send className="mr-2 w-3 h-3" /> Email
                   </Button>
                 </div>
@@ -465,34 +485,34 @@ export function CalculatorForm({ lane }: CalculatorFormProps) {
           </Card>
 
           <Card className="p-5 border-slate-200 shadow-sm">
-             <h4 className="text-[10px] font-bold text-slate-500 uppercase mb-4 tracking-wider">Margin Analysis</h4>
-             <div className="space-y-4">
-                <div>
-                  <div className="flex justify-between text-xs mb-1.5">
-                    <span className="text-slate-600 font-medium">Hourly Margin</span>
-                    <span className={`font-mono font-bold ${hourlyMargin > 180 ? 'text-emerald-600' : 'text-amber-600'}`} data-testid="text-hourly-margin">
-                      ${hourlyMargin.toFixed(2)}/HR
-                    </span>
-                  </div>
-                  <div className="w-full bg-slate-100 rounded-full h-1.5">
-                    <div 
-                      className={`h-1.5 rounded-full ${hourlyMargin > 180 ? 'bg-emerald-500' : 'bg-amber-500'}`}
-                      style={{ width: `${Math.min((hourlyMargin / 300) * 100, 100)}%` }}
-                    ></div>
-                  </div>
+            <h4 className="text-[10px] font-bold text-slate-500 uppercase mb-4 tracking-wider">Margin Analysis</h4>
+            <div className="space-y-4">
+              <div>
+                <div className="flex justify-between text-xs mb-1.5">
+                  <span className="text-slate-600 font-medium">Hourly Margin</span>
+                  <span className={`font-mono font-bold ${hourlyMargin > 180 ? 'text-red-500' : 'text-amber-600'}`} data-testid="text-hourly-margin">
+                    ${hourlyMargin.toFixed(2)}/HR
+                  </span>
                 </div>
-                
-                <div className="space-y-2">
-                  <div className={`flex items-center gap-2 p-2 rounded text-[10px] font-bold uppercase tracking-tight ${hourlyMargin > 160 ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-slate-50 text-slate-500 border border-slate-100'}`}>
-                    <div className={`w-1.5 h-1.5 rounded-full ${hourlyMargin > 160 ? 'bg-emerald-500' : 'bg-slate-300'}`} />
-                    Above $160/HR Threshold
-                  </div>
-                  <div className={`flex items-center gap-2 p-2 rounded text-[10px] font-bold uppercase tracking-tight ${hourlyMargin > 180 ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-slate-50 text-slate-500 border border-slate-100'}`}>
-                    <div className={`w-1.5 h-1.5 rounded-full ${hourlyMargin > 180 ? 'bg-emerald-500' : 'bg-slate-300'}`} />
-                    Above $180/HR Threshold
-                  </div>
+                <div className="w-full bg-slate-100 rounded-full h-1.5">
+                  <div
+                    className={`h-1.5 rounded-full ${hourlyMargin > 180 ? 'bg-red-500' : 'bg-amber-500'}`}
+                    style={{ width: `${Math.min((hourlyMargin / 300) * 100, 100)}%` }}
+                  ></div>
                 </div>
-             </div>
+              </div>
+
+              <div className="space-y-2">
+                <div className={`flex items-center gap-2 p-2 rounded text-[10px] font-bold uppercase tracking-tight ${hourlyMargin > 160 ? 'bg-red-50 text-red-700 border border-red-100' : 'bg-slate-50 text-slate-500 border border-slate-100'}`}>
+                  <div className={`w-1.5 h-1.5 rounded-full ${hourlyMargin > 160 ? 'bg-red-500' : 'bg-slate-300'}`} />
+                  Above $160/HR Threshold
+                </div>
+                <div className={`flex items-center gap-2 p-2 rounded text-[10px] font-bold uppercase tracking-tight ${hourlyMargin > 180 ? 'bg-red-50 text-red-700 border border-red-100' : 'bg-slate-50 text-slate-500 border border-slate-100'}`}>
+                  <div className={`w-1.5 h-1.5 rounded-full ${hourlyMargin > 180 ? 'bg-red-500' : 'bg-slate-300'}`} />
+                  Above $180/HR Threshold
+                </div>
+              </div>
+            </div>
           </Card>
         </div>
       </div>

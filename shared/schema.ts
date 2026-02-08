@@ -20,6 +20,7 @@ export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   username: text("username").notNull().unique(),
   email: text("email").notNull(),
+  password: text("password").notNull(),
   role: text("role").notNull().default("viewer"), // admin, manager, viewer
   createdAt: timestamp("created_at").defaultNow(),
 });
@@ -47,7 +48,7 @@ export const lanes = pgTable("lanes", {
   unloadTime: numeric("unload_time").notNull(),
   minTons: numeric("min_tons").notNull(),
   chainsFee: numeric("chains_fee").default("0"),
-  
+
   driverTargetPay: numeric("driver_target_pay").default("35"),
   ownerOperatorBiziPay: numeric("oo_bizi_pay").default("115"),
   ownerOperatorOwnPay: numeric("oo_own_pay").default("130"),
@@ -59,16 +60,16 @@ export const quotes = pgTable("quotes", {
   laneId: integer("lane_id").references(() => lanes.id),
   clientId: integer("client_id").references(() => clients.id),
   customerName: text("customer_name"),
-  
+
   // Workflow Status: Draft, Pending Review, Approved, Rejected
   status: text("status").default("Draft"),
   approvedBy: integer("approved_by").references(() => users.id),
   approvedAt: timestamp("approved_at"),
-  
+
   // Location overrides
   originOverride: text("origin_override"),
   destinationOverride: text("destination_override"),
-  
+
   // Core trip parameters
   distance: numeric("distance"),
   speed: numeric("speed"),
@@ -77,7 +78,7 @@ export const quotes = pgTable("quotes", {
   standbyTime: numeric("standby_time").default("0"),
   mtPerLoad: numeric("mt_per_load"),
   isRoundTrip: boolean("is_round_trip").default(true),
-  
+
   // Rate parameters
   driveRate: numeric("drive_rate"),
   loadRate: numeric("load_rate"),
@@ -86,17 +87,17 @@ export const quotes = pgTable("quotes", {
   chainsFee: numeric("chains_fee"),
   miscCharges: numeric("misc_charges").default("0"),
   miscChargesDescription: text("misc_charges_description"),
-  
+
   // Target pay rates
   driverTarget: numeric("driver_target"),
   ooBiziTarget: numeric("oo_bizi_target"),
   ooOwnTarget: numeric("oo_own_target"),
-  
+
   // Calculated Results (Snapshot)
   totalHours: numeric("total_hours"),
   totalCost: numeric("total_cost"),
   ratePerTon: numeric("rate_per_ton"),
-  
+
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

@@ -1,10 +1,28 @@
-import { Search } from "lucide-react";
-import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { ChevronsUpDown, Check, ChevronDown } from "lucide-react";
 import { useLanes } from "@/hooks/use-lanes";
 import { Lane } from "@shared/schema";
 import { useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 
 interface LaneSelectorProps {
   selectedLaneId: number | null;
@@ -14,78 +32,130 @@ interface LaneSelectorProps {
 
 export function LaneSelector({ selectedLaneId, onSelectLane, clientId }: LaneSelectorProps) {
   const { data: lanes, isLoading } = useLanes(clientId);
-  const [searchTerm, setSearchTerm] = useState("");
+  const [open, setOpen] = useState(false); // Popover state
+  const [isOpen, setIsOpen] = useState(true); // Collapsible state
 
-  const filteredLanes = lanes?.filter(lane => {
-    // Filter out lanes with zero or invalid distance/speed
+  if (isLoading) {
+    return (
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4 space-y-2">
+        <Skeleton className="h-6 w-32 mb-2" />
+        <Skeleton className="h-10 w-full" />
+      </div>
+    );
+  }
+
+  const safeLanes = lanes || [];
+  const selectedLane = safeLanes.find(l => l.id === selectedLaneId);
+
+  // Filter valid lanes
+  const validLanes = safeLanes.filter(lane => {
     const distance = parseFloat(lane.distance || "0");
     const speed = parseFloat(lane.speed || "0");
-    if (distance === 0 || speed === 0) return false;
-    
-    // Search filter
-    return lane.origin.toLowerCase().includes(searchTerm.toLowerCase()) || 
-      lane.destination.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      lane.product.toLowerCase().includes(searchTerm.toLowerCase());
+    return distance > 0 && speed > 0;
   });
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-200 h-full flex flex-col overflow-hidden">
-      <div className="p-4 border-b border-gray-100 bg-gray-50/50">
-        <h3 className="font-display font-semibold text-gray-900 mb-2">Select Lane</h3>
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <Input 
-            className="pl-9 bg-white border-gray-200 focus:ring-primary/20" 
-            placeholder="Search Origin, Dest..." 
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            data-testid="input-lane-search"
-          />
+    <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+      <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+        <div className="p-4 border-b border-gray-100 bg-gray-50/50 flex items-center justify-between">
+          <div className="flex flex-col">
+            <h3 className="font-display font-semibold text-gray-900">Select Lane</h3>
+            {!isOpen && selectedLane && (
+              <span className="text-xs text-primary font-medium mt-1">
+                {selectedLane.origin} → {selectedLane.destination}
+              </span>
+            )}
+          </div>
+          <CollapsibleTrigger asChild>
+            <Button variant="ghost" size="sm" className="w-9 p-0">
+              <ChevronDown className={cn("h-4 w-4 transition-transform duration-200", isOpen ? "" : "-rotate-90")} />
+              <span className="sr-only">Toggle</span>
+            </Button>
+          </CollapsibleTrigger>
         </div>
-      </div>
 
-      <ScrollArea className="flex-1 p-2">
-        {isLoading ? (
-          <div className="space-y-2 p-2">
-            {[1, 2, 3, 4, 5].map(i => (
-              <Skeleton key={i} className="h-14 w-full" />
-            ))}
+        <CollapsibleContent>
+          <div className="p-4">
+            <Popover open={open} onOpenChange={setOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  role="combobox"
+                  aria-expanded={open}
+                  className="w-full justify-between h-auto py-3 px-4 text-left font-normal"
+                >
+                  {selectedLane ? (
+                    <div className="flex flex-col items-start gap-1">
+                      <span className="font-medium text-gray-900">
+                        {selectedLane.origin} → {selectedLane.destination}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        {selectedLane.product} • {selectedLane.distance}km
+                      </span>
+                    </div>
+                  ) : (
+                    <span className="text-muted-foreground">Select a lane...</span>
+                  )}
+                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                <Command>
+                  <CommandInput placeholder="Search lanes..." />
+                  <CommandList>
+                    <CommandEmpty>No lanes found.</CommandEmpty>
+                    <CommandGroup>
+                      {validLanes.map((lane) => (
+                        <CommandItem
+                          key={lane.id}
+                          value={`${lane.origin} ${lane.destination} ${lane.product}`}
+                          onSelect={() => {
+                            onSelectLane(lane);
+                            setOpen(false);
+                          }}
+                          className="cursor-pointer"
+                        >
+                          <Check
+                            className={cn(
+                              "mr-2 h-4 w-4",
+                              selectedLaneId === lane.id ? "opacity-100" : "opacity-0"
+                            )}
+                          />
+                          <div className="flex flex-col">
+                            <span className="font-medium">
+                              {lane.origin} → {lane.destination}
+                            </span>
+                            <span className="text-xs text-muted-foreground">
+                              {lane.product} • {lane.distance}km
+                            </span>
+                          </div>
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
+
+            {validLanes.length > 0 && (
+              <div className="mt-2 text-xs text-center text-gray-400">
+                {validLanes.length} lanes available
+                <div className="text-[8px] text-gray-300">Total: {lanes?.length || 0}</div>
+              </div>
+            )}
+            {!isLoading && lanes?.length === 0 && (
+              <div className="mt-2 text-xs text-center text-red-400">
+                No lanes found (API returned 0)
+              </div>
+            )}
+            {!isLoading && lanes && validLanes.length === 0 && lanes.length > 0 && (
+              <div className="mt-2 text-xs text-center text-amber-400">
+                {lanes.length} lanes fetched, but 0 match filter
+              </div>
+            )}
           </div>
-        ) : filteredLanes?.length === 0 ? (
-          <div className="p-4 text-center text-sm text-gray-500">
-            {clientId ? "No lanes found for this client" : "No lanes found"}
-          </div>
-        ) : (
-          <div className="space-y-1">
-            {filteredLanes?.map((lane) => (
-              <button
-                key={lane.id}
-                onClick={() => onSelectLane(lane)}
-                className={`
-                  w-full text-left p-3 rounded-lg text-sm transition-all duration-200 group
-                  ${selectedLaneId === lane.id 
-                    ? "bg-primary/10 border-primary/20 border text-primary font-medium shadow-sm" 
-                    : "hover:bg-gray-50 border border-transparent text-gray-600"}
-                `}
-                data-testid={`button-lane-${lane.id}`}
-              >
-                <div className="flex justify-between items-start">
-                  <div>
-                    <div className="font-semibold">{lane.origin} → {lane.destination}</div>
-                    <div className="text-xs opacity-70 mt-1">{lane.product} • {lane.distance}km</div>
-                  </div>
-                </div>
-              </button>
-            ))}
-          </div>
-        )}
-      </ScrollArea>
-      
-      {filteredLanes && filteredLanes.length > 0 && (
-        <div className="p-2 border-t border-gray-100 text-xs text-gray-400 text-center">
-          {filteredLanes.length} lane{filteredLanes.length !== 1 ? 's' : ''} available
-        </div>
-      )}
+        </CollapsibleContent>
+      </Collapsible>
     </div>
   );
 }

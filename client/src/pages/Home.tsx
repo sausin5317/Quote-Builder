@@ -17,7 +17,7 @@ import { Label } from "@/components/ui/label";
 export default function Home() {
   const [selectedLane, setSelectedLane] = useState<Lane | null>(null);
   const [selectedClientId, setSelectedClientId] = useState<number | null>(null);
-  
+
   const { data: clients } = useQuery<Client[]>({
     queryKey: ['/api/clients'],
   });
@@ -35,9 +35,9 @@ export default function Home() {
   return (
     <Layout>
       <div className="flex flex-col h-[calc(100vh-8rem)] lg:h-[calc(100vh-6rem)] gap-6">
-        
+
         <div className="flex flex-col lg:flex-row gap-6 h-full">
-          
+
           <div className="w-full lg:w-80 lg:shrink-0 flex flex-col gap-4">
             <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-200">
               <Label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 block">
@@ -57,11 +57,14 @@ export default function Home() {
                   ))}
                 </SelectContent>
               </Select>
+              <div className="mt-1 text-[8px] text-gray-400">
+                {clients ? `${clients.length} clients loaded` : "Loading clients..."}
+              </div>
             </div>
-            
+
             <div className="flex-1 h-64 lg:h-auto">
-              <LaneSelector 
-                selectedLaneId={selectedLane?.id || null} 
+              <LaneSelector
+                selectedLaneId={selectedLane?.id || null}
                 onSelectLane={setSelectedLane}
                 clientId={selectedClientId}
               />

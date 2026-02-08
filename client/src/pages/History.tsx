@@ -11,15 +11,13 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { CheckCircle2, XCircle, Clock, FileText, AlertCircle } from "lucide-react";
 import type { Quote, User } from "@shared/schema";
+import { useAuth } from "@/hooks/use-auth";
 
 export default function History() {
+  const { user: currentUser } = useAuth();
   const { data: quotes, isLoading } = useQuotes();
   const { toast } = useToast();
   const updateQuote = useUpdateQuote();
-  
-  const { data: users } = useQuery<User[]>({
-    queryKey: ['/api/users'],
-  });
 
   const approveQuote = useMutation({
     mutationFn: async ({ quoteId, userId }: { quoteId: number; userId: number }) => {
@@ -92,31 +90,31 @@ export default function History() {
     }
   };
 
-  const adminUser = users?.find(u => u.role === "admin");
+  const canApprove = currentUser?.role === "admin" || currentUser?.role === "manager";
 
   return (
     <Layout>
       <div className="space-y-6">
-         <div className="flex justify-between items-center">
+        <div className="flex justify-between items-center">
           <div>
-             <h1 className="text-3xl font-display font-bold text-gray-900">Quote History</h1>
-             <p className="text-gray-500 mt-1">Review and manage previously generated quotes.</p>
+            <h1 className="text-3xl font-display font-bold text-gray-900">Quote History</h1>
+            <p className="text-gray-500 mt-1">Review and manage previously generated quotes.</p>
           </div>
         </div>
 
         <Card className="border-gray-200 shadow-sm overflow-hidden">
           <CardContent className="p-0">
             {isLoading ? (
-               <div className="p-4 space-y-4">
+              <div className="p-4 space-y-4">
                 {[1, 2, 3].map((i) => (
                   <Skeleton key={i} className="h-12 w-full" />
                 ))}
               </div>
             ) : quotes?.length === 0 ? (
-               <div className="p-12 text-center text-gray-500">
+              <div className="p-12 text-center text-gray-500">
                 <AlertCircle className="w-12 h-12 mx-auto mb-4 text-gray-300" />
                 No history available yet. Create your first quote!
-               </div>
+              </div>
             ) : (
               <div className="overflow-x-auto">
                 <Table>
@@ -133,10 +131,10 @@ export default function History() {
                   </TableHeader>
                   <TableBody>
                     {quotes?.map((quote) => {
-                      const mtRate = quote.mtPerLoad && parseFloat(quote.mtPerLoad) > 0 
-                        ? (parseFloat(quote.totalCost || "0") / parseFloat(quote.mtPerLoad)).toFixed(2) 
+                      const mtRate = quote.mtPerLoad && parseFloat(quote.mtPerLoad) > 0
+                        ? (parseFloat(quote.totalCost || "0") / parseFloat(quote.mtPerLoad)).toFixed(2)
                         : quote.ratePerTon || "0.00";
-                      
+
                       return (
                         <TableRow key={quote.id} className="hover:bg-gray-50" data-testid={`row-quote-${quote.id}`}>
                           <TableCell className="text-gray-600">
@@ -150,20 +148,20 @@ export default function History() {
                           <TableCell className="text-right font-mono font-medium text-green-600">${parseFloat(quote.totalCost || "0").toLocaleString(undefined, { minimumFractionDigits: 2 })}</TableCell>
                           <TableCell className="text-right text-gray-500 text-sm">${mtRate}/MT</TableCell>
                           <TableCell>
-                            {quote.status === "Pending Review" && adminUser && (
+                            {quote.status === "Pending Review" && canApprove && (
                               <div className="flex gap-2">
-                                <Button 
-                                  size="sm" 
+                                <Button
+                                  size="sm"
                                   variant="outline"
                                   className="text-emerald-600 border-emerald-200 hover:bg-emerald-50"
-                                  onClick={() => approveQuote.mutate({ quoteId: quote.id, userId: adminUser.id })}
+                                  onClick={() => approveQuote.mutate({ quoteId: quote.id, userId: currentUser!.id })}
                                   disabled={approveQuote.isPending}
                                   data-testid={`button-approve-${quote.id}`}
                                 >
                                   <CheckCircle2 className="w-4 h-4" />
                                 </Button>
-                                <Button 
-                                  size="sm" 
+                                <Button
+                                  size="sm"
                                   variant="outline"
                                   className="text-red-600 border-red-200 hover:bg-red-50"
                                   onClick={() => handleReject(quote.id)}
@@ -175,8 +173,8 @@ export default function History() {
                               </div>
                             )}
                             {quote.status === "Draft" && (
-                              <Button 
-                                size="sm" 
+                              <Button
+                                size="sm"
                                 variant="ghost"
                                 className="text-blue-600"
                                 onClick={() => updateQuote.mutate({ id: quote.id, status: "Pending Review" })}

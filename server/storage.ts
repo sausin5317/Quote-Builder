@@ -24,23 +24,23 @@ export interface IStorage {
   getClient(id: number): Promise<Client | undefined>;
   getClientByName(name: string): Promise<Client | undefined>;
   createClient(client: InsertClient): Promise<Client>;
-  
+
   // Users
   getUsers(): Promise<User[]>;
   getUser(id: number): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
-  
+
   // Products
   getProducts(): Promise<Product[]>;
   createProduct(product: InsertProduct): Promise<Product>;
-  
+
   // Lanes
   getLanes(): Promise<Lane[]>;
   getLanesByClient(clientId: number): Promise<Lane[]>;
   getLane(id: number): Promise<Lane | undefined>;
   createLane(lane: InsertLane): Promise<Lane>;
   clearLanes(): Promise<void>;
-  
+
   // Quotes
   getQuotes(): Promise<Quote[]>;
   getQuotesByClient(clientId: number): Promise<Quote[]>;
@@ -48,7 +48,7 @@ export interface IStorage {
   createQuote(quote: InsertQuote): Promise<Quote>;
   updateQuote(id: number, quote: Partial<InsertQuote>): Promise<Quote>;
   deleteQuote(id: number): Promise<void>;
-  
+
   // Analytics
   getQuoteStats(): Promise<{ status: string; count: number }[]>;
   getRevenueByDateRange(startDate: Date, endDate: Date): Promise<{ total: string }>;
@@ -107,7 +107,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getLanesByClient(clientId: number): Promise<Lane[]> {
-    return await db.select().from(lanes).where(eq(lanes.clientId, clientId));
+    return await db
+      .select()
+      .from(lanes)
+      .where(sql`${lanes.clientId} = ${clientId} OR ${lanes.clientId} IS NULL`);
   }
 
   async getLane(id: number): Promise<Lane | undefined> {

@@ -5,7 +5,7 @@ export function useLanes(clientId?: number | null) {
   return useQuery({
     queryKey: clientId ? ['/api/lanes/client', clientId] : [api.lanes.list.path],
     queryFn: async () => {
-      const url = clientId 
+      const url = clientId
         ? buildUrl(api.lanes.listByClient.path, { clientId })
         : api.lanes.list.path;
       const res = await fetch(url, { credentials: "include" });
@@ -27,5 +27,32 @@ export function useLane(id: number | null) {
       if (!res.ok) throw new Error("Failed to fetch lane");
       return api.lanes.get.responses[200].parse(await res.json());
     },
+  });
+}
+
+export function useImportLanes() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (file: File) => {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await fetch(api.lanes.bulkUpload.path, {
+        method: "POST",
+        body: formData,
+        credentials: "include"
+      });
+
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.message || "Failed to import lanes");
+      }
+
+      return res.json() as Promise<{ count: number }>;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [api.lanes.list.path] });
+    }
   });
 }

@@ -1,17 +1,19 @@
 import { ReactNode } from "react";
 import { Link, useLocation } from "wouter";
-import { 
-  Calculator, 
-  History, 
-  Settings, 
-  Truck, 
+import {
+  Calculator,
+  History,
+  Settings,
+  Truck,
   Menu,
   X,
   LayoutDashboard,
-  Building2
+  Building2,
+  LogOut
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/hooks/use-auth";
 
 interface LayoutProps {
   children: ReactNode;
@@ -20,6 +22,7 @@ interface LayoutProps {
 export function Layout({ children }: LayoutProps) {
   const [location] = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { logoutMutation } = useAuth();
 
   const navItems = [
     { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard" },
@@ -40,18 +43,19 @@ export function Layout({ children }: LayoutProps) {
           </div>
           <span className="text-xl font-display font-bold text-gray-900">LoadTrax</span>
         </div>
-        
+
         <nav className="flex-1 p-4 space-y-2">
           {navItems.map((item) => {
             const isActive = location === item.href;
             return (
               <Link key={item.href} href={item.href} className={`
-                flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-all duration-200
-                ${isActive 
-                  ? "bg-primary text-white shadow-md shadow-primary/20 translate-x-1" 
-                  : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"}
-              `}>
-                <item.icon className={`w-5 h-5 ${isActive ? "text-white" : "text-gray-500"}`} />
+                flex items - center gap - 3 px - 4 py - 3 rounded - lg font - medium transition - all duration - 200
+                ${isActive
+                  ? "bg-primary text-white shadow-md shadow-primary/20 translate-x-1"
+                  : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                }
+`}>
+                <item.icon className={`w - 5 h - 5 ${isActive ? "text-white" : "text-gray-500"} `} />
                 {item.label}
               </Link>
             );
@@ -59,17 +63,26 @@ export function Layout({ children }: LayoutProps) {
         </nav>
 
         <div className="p-4 border-t border-gray-100">
-          <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
+          <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 mb-4">
             <h4 className="font-semibold text-blue-900 text-sm">Need Help?</h4>
             <p className="text-xs text-blue-600 mt-1">Contact support for pricing adjustments.</p>
           </div>
+
+          <Button
+            variant="outline"
+            className="w-full justify-start gap-3 border-gray-200 text-gray-700 hover:text-red-600 hover:border-red-200 hover:bg-red-50"
+            onClick={() => logoutMutation.mutate()}
+          >
+            <LogOut className="w-5 h-5" />
+            Logout
+          </Button>
         </div>
       </aside>
 
       {/* Mobile Header */}
       <div className="lg:hidden fixed top-0 w-full bg-white border-b border-gray-200 z-20 px-4 py-3 flex items-center justify-between shadow-sm">
         <div className="flex items-center gap-2">
-           <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
+          <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
             <Truck className="w-5 h-5 text-white" />
           </div>
           <span className="font-display font-bold text-gray-900">LoadTrax</span>

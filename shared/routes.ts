@@ -42,7 +42,7 @@ export const api = {
       },
     },
   },
-  
+
   // Users
   users: {
     list: {
@@ -62,7 +62,7 @@ export const api = {
       },
     },
   },
-  
+
   // Products
   products: {
     list: {
@@ -82,7 +82,7 @@ export const api = {
       },
     },
   },
-  
+
   // Lanes
   lanes: {
     list: {
@@ -122,8 +122,15 @@ export const api = {
         200: z.string(),
       },
     },
+    template: {
+      method: 'GET' as const,
+      path: '/api/lanes/template',
+      responses: {
+        200: z.string(),
+      },
+    },
   },
-  
+
   // Quotes
   quotes: {
     list: {
@@ -177,7 +184,7 @@ export const api = {
       },
     },
   },
-  
+
   // Analytics/Dashboard
   analytics: {
     quoteStats: {
