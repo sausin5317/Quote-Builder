@@ -9,7 +9,7 @@ import { parse } from "csv-parse";
 import { stringify } from "csv-stringify/sync";
 import multer from "multer";
 import * as XLSX from "xlsx";
-import { setupAuth, hashPassword } from "./auth";
+import { setupAuth, hashPassword, comparePasswords } from "./auth";
 import { parseLaneRecord, LANE_IMPORT_COLUMNS } from "./utils/lane-parser";
 
 const upload = multer({ dest: "uploads/" });
@@ -92,20 +92,21 @@ export async function registerRoutes(
 
     try {
       const userId = Number(req.params.id);
-      const { password } = z.object({ password: z.string().min(6) }).parse(req.body);
-      const hashedPassword = await hashPassword(password);
+      console.log("[Password Reset] User ID:", userId);
+      console.log("[Password Reset] Request body:", req.body);
 
-      // We need a storage method to update password/user. 
-      // Ideally storage should have updateUser, but for now we might need to add it or generic update.
-      // Assuming storage.updateUser exists or we implement it. 
-      // Wait, I need to check if storage.updateUser exists. 
-      // Checking storage.ts might be needed. For now I will assume I need to add it to storage interface.
-      // Actually, I should check storage.ts first. 
-      // Let's defer this implementation slightly or assume I'll add it to storage next.
-      // I'll stick to defining routes and will fix storage in next step.
+      const { password } = z.object({ password: z.string().min(6) }).parse(req.body);
+      console.log("[Password Reset] Password length:", password.length);
+
+      const hashedPassword = await hashPassword(password);
+      console.log("[Password Reset] Hashed password (first 20 chars):", hashedPassword.substring(0, 20));
+
       await storage.updateUser(userId, { password: hashedPassword });
+      console.log("[Password Reset] Password updated successfully for user:", userId);
+
       res.json({ message: "Password updated" });
     } catch (err) {
+      console.error("[Password Reset] Error:", err);
       if (err instanceof z.ZodError) {
         return res.status(400).json({ message: err.errors[0].message });
       }
@@ -131,6 +132,38 @@ export async function registerRoutes(
     }
   });
 
+  // User: Change own password (requires old password)
+  app.put("/api/user/change-password", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+
+    try {
+      const { oldPassword, newPassword } = z.object({
+        oldPassword: z.string().min(1),
+        newPassword: z.string().min(6, "New password must be at least 6 characters"),
+      }).parse(req.body);
+
+      // Verify old password
+      const user = await storage.getUser(req.user.id);
+      if (!user) return res.status(404).json({ message: "User not found" });
+
+      const isValid = await comparePasswords(oldPassword, user.password);
+      if (!isValid) {
+        return res.status(400).json({ message: "Current password is incorrect" });
+      }
+
+      // Hash and update new password
+      const hashedPassword = await hashPassword(newPassword);
+      await storage.updateUser(req.user.id, { password: hashedPassword });
+
+      res.json({ message: "Password changed successfully" });
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
+      res.status(500).json({ message: "Failed to change password" });
+    }
+  });
+
   // === PRODUCTS API ===
   app.get(api.products.list.path, async (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
@@ -152,7 +185,46 @@ export async function registerRoutes(
     }
   });
 
+  // Delete product (admin only)
+  app.delete("/api/products/:id", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    if (req.user.role !== "admin") return res.status(403).json({ message: "Only admins can delete products" });
+    try {
+      await storage.deleteProduct(Number(req.params.id));
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to delete product" });
+    }
+  });
+
   // === LANES API ===
+
+  // Paginated search endpoint
+  app.get("/api/lanes/search", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    const search = req.query.search as string | undefined;
+    const product = req.query.product as string | undefined;
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize) || 25));
+
+    const result = await storage.searchLanes({ search, product, page, pageSize });
+    res.json(result);
+  });
+
+  // Duplicate detection endpoint
+  app.get("/api/lanes/duplicates", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    const duplicates = await storage.findDuplicateLanes();
+    res.json(duplicates);
+  });
+
+  // Distinct products used in lanes (for filter dropdown)
+  app.get("/api/lanes/products", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    const products = await storage.getDistinctLaneProducts();
+    res.json(products);
+  });
+
   app.get(api.lanes.list.path, async (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
     const lanes = await storage.getLanes();
@@ -263,6 +335,58 @@ export async function registerRoutes(
       return res.status(404).json({ message: 'Lane not found' });
     }
     res.json(lane);
+  });
+
+  // Create single lane
+  app.post("/api/lanes", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    if (req.user.role === "viewer") return res.status(403).json({ message: "Viewers cannot create lanes" });
+
+    try {
+      const lane = await storage.createLane(req.body);
+      res.status(201).json(lane);
+    } catch (err) {
+      console.error("Create lane error:", err);
+      res.status(500).json({ message: "Failed to create lane" });
+    }
+  });
+
+  // Update lane
+  app.put("/api/lanes/:id", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    if (req.user.role === "viewer") return res.status(403).json({ message: "Viewers cannot edit lanes" });
+
+    try {
+      const id = Number(req.params.id);
+      const existing = await storage.getLane(id);
+      if (!existing) return res.status(404).json({ message: "Lane not found" });
+
+      const lane = await storage.updateLane(id, req.body);
+      res.json(lane);
+    } catch (err) {
+      console.error("Update lane error:", err);
+      res.status(500).json({ message: "Failed to update lane" });
+    }
+  });
+
+  // Delete lane
+  app.delete("/api/lanes/:id", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    if (req.user.role === "viewer") {
+      return res.status(403).json({ message: "Viewers cannot delete lanes" });
+    }
+
+    try {
+      const id = Number(req.params.id);
+      const existing = await storage.getLane(id);
+      if (!existing) return res.status(404).json({ message: "Lane not found" });
+
+      await storage.deleteLane(id);
+      res.json({ success: true });
+    } catch (err) {
+      console.error("Delete lane error:", err);
+      res.status(500).json({ message: "Failed to delete lane" });
+    }
   });
 
 

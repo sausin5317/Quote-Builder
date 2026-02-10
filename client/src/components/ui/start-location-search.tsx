@@ -1,22 +1,8 @@
-import { useEffect, useState } from "react";
-import usePlacesAutocomplete, {
-    getGeocode,
-    getLatLng,
-} from "use-places-autocomplete";
-import {
-    Command,
-    CommandDialog,
-    CommandEmpty,
-    CommandGroup,
-    CommandInput,
-    CommandItem,
-    CommandList,
-    CommandSeparator,
-} from "@/components/ui/command";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { useEffect, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
-import { Check, ChevronsUpDown, MapPin } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { X } from "lucide-react";
 
 interface LocationSearchInputProps {
     value: string;
@@ -25,94 +11,152 @@ interface LocationSearchInputProps {
     className?: string;
 }
 
-// Mock suggestions for testing without API key
-
-
 export function LocationSearchInput({
     value,
     onChange,
     placeholder = "Search location...",
     className,
 }: LocationSearchInputProps) {
-    const [open, setOpen] = useState(false);
+    const [isEditing, setIsEditing] = useState(!value);
+    const containerRef = useRef<HTMLDivElement>(null);
+    const pickerRef = useRef<any>(null);
+    const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    const lastPlaceIdRef = useRef("");
+    const onChangeRef = useRef(onChange);
 
-    const {
-        ready,
-        value: searchValue,
-        suggestions: { status, data },
-        setValue: setSearchValue,
-        clearSuggestions,
-    } = usePlacesAutocomplete({
-        requestOptions: {
-            /* Define search scope here if needed */
-        },
-        debounce: 300,
-        initOnMount: true, // Initialize when Google Maps script is loaded
-    });
+    // Keep onChange ref fresh
+    useEffect(() => { onChangeRef.current = onChange; }, [onChange]);
 
-    // Mock logic: Use mock data if API is not ready (missing key)
-    const displayedData = data;
-
-    const displayedStatus = status;
-
-    // Sync internal search state if external value changes (optional)
+    // Cleanup polling on unmount
     useEffect(() => {
-        // Only set if we aren't actively searching to avoid overwriting user input
-        if (!open && value) {
-            // We don't necessarily want to query strict address on value change as it might trigger API cost
-            // But we can keep it in sync if needed. For now, we trust the input.
-        }
-    }, [value, open]);
+        return () => {
+            if (pollingRef.current) clearInterval(pollingRef.current);
+        };
+    }, []);
 
-    const handleSelect = async (address: string) => {
-        setSearchValue(address, false);
-        clearSuggestions();
-        onChange(address);
-        setOpen(false);
-    };
+    // If value is cleared externally, switch to edit mode
+    useEffect(() => {
+        if (!value) setIsEditing(true);
+    }, [value]);
 
+    useEffect(() => {
+        if (!isEditing) return;
+        let active = true;
+
+        // Arrow function - safe in strict mode
+        const handlePlaceSelect = async (place: any) => {
+            if (!place) return;
+            try {
+                const pid = place.id || "";
+                if (pid && pid === lastPlaceIdRef.current) return;
+                if (pid) lastPlaceIdRef.current = pid;
+
+                await place.fetchFields({ fields: ["formattedAddress", "name", "location"] });
+                const address = place.formattedAddress || place.name || "";
+                console.log("LocationSearchInput: address resolved:", address);
+                if (address) {
+                    onChangeRef.current(address);
+                    setIsEditing(false);
+                }
+            } catch (err) {
+                console.error("LocationSearchInput: fetchFields error", err);
+                const fallback = place.name || place.displayName || "";
+                if (fallback) {
+                    onChangeRef.current(fallback);
+                    setIsEditing(false);
+                }
+            }
+        };
+
+        // Arrow function - safe in strict mode
+        const init = async () => {
+            try {
+                const g = (window as any).google;
+                if (!g?.maps?.importLibrary) return;
+
+                const lib = await g.maps.importLibrary("places");
+                if (!active || !containerRef.current) return;
+
+                const Ctor = lib.PlaceAutocompleteElement;
+                if (!Ctor) return;
+
+                if (!pickerRef.current) {
+                    const picker = new Ctor();
+                    picker.placeholder = placeholder;
+                    picker.classList.add("w-full");
+                    picker.addEventListener("gmp-places-select", async (evt: any) => {
+                        console.log("LocationSearchInput: gmp-places-select fired");
+                        await handlePlaceSelect(evt.place);
+                    });
+                    pickerRef.current = picker;
+                }
+
+                if (
+                    pickerRef.current &&
+                    containerRef.current &&
+                    !containerRef.current.contains(pickerRef.current)
+                ) {
+                    containerRef.current.innerHTML = "";
+                    containerRef.current.appendChild(pickerRef.current);
+                    console.log("LocationSearchInput: Picker attached");
+                }
+
+                // Start polling fallback
+                if (!pollingRef.current) {
+                    pollingRef.current = setInterval(() => {
+                        const picker = pickerRef.current;
+                        if (picker && picker.place) {
+                            const p = picker.place;
+                            const pid = p.id || "";
+                            if (pid && pid !== lastPlaceIdRef.current) {
+                                console.log("LocationSearchInput: polling detected place");
+                                handlePlaceSelect(p);
+                            }
+                        }
+                    }, 1000);
+                }
+
+                if (active) clearInterval(retry);
+            } catch (e) {
+                console.error("LocationSearchInput: init error", e);
+            }
+        };
+
+        const retry = setInterval(init, 500);
+        init();
+
+        return () => {
+            active = false;
+            clearInterval(retry);
+        };
+    }, [isEditing, placeholder]);
+
+    // View mode
+    if (!isEditing && value) {
+        return (
+            <div className={cn("relative flex items-center gap-2", className)}>
+                <Input
+                    value={value}
+                    readOnly
+                    className="pr-8 bg-gray-50 focus-visible:ring-0 cursor-default"
+                    onClick={() => setIsEditing(true)}
+                />
+                <Button
+                    variant="ghost"
+                    size="sm"
+                    className="absolute right-1 h-7 w-7 p-0 text-gray-400 hover:text-gray-600"
+                    onClick={() => { onChange(""); setIsEditing(true); }}
+                >
+                    <X className="h-4 w-4" />
+                </Button>
+            </div>
+        );
+    }
+
+    // Edit mode
     return (
-        <div className="relative w-full">
-            <Popover open={open} onOpenChange={setOpen}>
-                <PopoverTrigger asChild>
-                    <Input
-                        className={cn("w-full", className)}
-                        placeholder={placeholder}
-                        value={open ? searchValue : value}
-                        onChange={(e) => {
-                            setSearchValue(e.target.value);
-                            if (!open) setOpen(true);
-                            // Also update parent immediately to allow free text
-                            onChange(e.target.value);
-                        }}
-                        disabled={false}
-                        autoComplete="off"
-                    // data-1p-ignore // Ignore password managers
-                    />
-                </PopoverTrigger>
-                <PopoverContent className="p-0" align="start" style={{ width: 'var(--radix-popover-trigger-width)' }}>
-                    <Command shouldFilter={false}>
-                        {/* We don't filter locally, we rely on Google results or Mock results */}
-                        <CommandList>
-                            {displayedStatus === "OK" &&
-                                displayedData.map(({ place_id, description }) => (
-                                    <CommandItem
-                                        key={place_id}
-                                        value={description}
-                                        onSelect={handleSelect}
-                                        className="cursor-pointer"
-                                    >
-                                        <MapPin className="mr-2 h-4 w-4 shrink-0 opacity-50" />
-                                        {description}
-                                    </CommandItem>
-                                ))}
-                            {displayedStatus === "ZERO_RESULTS" && (
-                                <CommandEmpty>No results found.</CommandEmpty>
-                            )}
-                        </CommandList>
-                    </Command>
-                </PopoverContent>
-            </Popover>
+        <div ref={containerRef} className={cn("w-full min-h-[40px] border rounded-md", className)}>
+            <div className="p-2 text-xs text-gray-400">Loading Google Maps...</div>
         </div>
     );
 }

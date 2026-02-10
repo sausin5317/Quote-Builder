@@ -2,13 +2,12 @@ import { useAuth } from "@/hooks/use-auth";
 import { useEffect } from "react";
 import { useLocation } from "wouter";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm } from "react-hook-form";
+import { useForm, FormProvider } from "react-hook-form";
 import { z } from "zod";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { insertUserSchema, InsertUser } from "@shared/schema";
 
 // Extend schema for login form (no role needed)
@@ -47,7 +46,7 @@ export default function AuthPage() {
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <Form {...loginForm}>
+                    <FormProvider {...loginForm}>
                         <form onSubmit={loginForm.handleSubmit((data) => loginMutation.mutate(data))} className="space-y-4">
                             <FormField
                                 control={loginForm.control}
@@ -79,7 +78,7 @@ export default function AuthPage() {
                                 {loginMutation.isPending ? "Logging in..." : "Login"}
                             </Button>
                         </form>
-                    </Form>
+                    </FormProvider>
                 </CardContent>
             </Card>
         </div>

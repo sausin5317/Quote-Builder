@@ -21,7 +21,6 @@ import {
     DialogTrigger,
 } from "@/components/ui/dialog";
 import {
-    Form,
     FormControl,
     FormField,
     FormItem,
@@ -35,12 +34,13 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
-import { useForm } from "react-hook-form";
+import { useForm, FormProvider } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Loader2, Trash2, KeyRound, UserPlus } from "lucide-react";
 import { useState } from "react";
 import { format } from "date-fns";
+import { Label } from "@/components/ui/label";
 
 const createUserSchema = z.object({
     username: z.string().min(1, "Username is required"),
@@ -140,7 +140,7 @@ export default function UsersPage() {
                         <DialogHeader>
                             <DialogTitle>Create New User</DialogTitle>
                         </DialogHeader>
-                        <Form {...form}>
+                        <FormProvider {...form}>
                             <form onSubmit={form.handleSubmit((data) => createMutation.mutate(data))} className="space-y-4">
                                 <FormField
                                     control={form.control}
@@ -209,7 +209,7 @@ export default function UsersPage() {
                                     {createMutation.isPending ? "Creating..." : "Create User"}
                                 </Button>
                             </form>
-                        </Form>
+                        </FormProvider>
                     </DialogContent>
                 </Dialog>
             </div>
@@ -285,7 +285,7 @@ function ResetPasswordForm({ id, onSubmit, isLoading }: { id: number, onSubmit: 
     return (
         <div className="space-y-4">
             <div className="space-y-2">
-                <FormLabel>New Password</FormLabel>
+                <Label>New Password</Label>
                 <Input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Min 6 chars" />
             </div>
             <Button className="w-full" onClick={() => onSubmit(password)} disabled={isLoading || password.length < 6}>

@@ -1,4 +1,4 @@
-
+import "dotenv/config";
 import { db } from "../server/db";
 import { users } from "../shared/schema";
 import { scrypt, randomBytes } from "crypto";
@@ -16,9 +16,12 @@ async function seedAdmin() {
     console.log("Seeding admin user...");
     try {
         const hashedPassword = await hashPassword("admin123");
+        console.log("Password hashed.");
 
         // Check if admin exists
+        console.log("Checking for existing users...");
         const existing = await db.select().from(users).limit(1);
+        console.log("Existing users count:", existing.length);
         if (existing.length > 0) {
             console.log("Users already exist. Skipping seed.");
             process.exit(0);

@@ -68,6 +68,22 @@ export function Layout({ children }: LayoutProps) {
         </nav>
 
         <div className="p-4 border-t border-gray-100">
+          {/* User Profile Section */}
+          <div className="flex items-center gap-3 mb-4 p-3 bg-gray-50 rounded-xl">
+            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center text-white font-semibold text-sm shadow-md">
+              {user?.username?.charAt(0).toUpperCase() || "U"}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-medium text-gray-900 truncate">{user?.username}</p>
+              <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium 
+                ${user?.role === 'admin' ? 'bg-purple-100 text-purple-700' :
+                  user?.role === 'approver' ? 'bg-blue-100 text-blue-700' :
+                    user?.role === 'quoter' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
+                {user?.role?.toUpperCase()}
+              </span>
+            </div>
+          </div>
+
           <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 mb-4">
             <h4 className="font-semibold text-blue-900 text-sm">Need Help?</h4>
             <p className="text-xs text-blue-600 mt-1">Contact support for pricing adjustments.</p>

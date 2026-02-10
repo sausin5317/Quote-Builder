@@ -137,14 +137,43 @@ export const generateQuotePDF = ({ quote, clientName, isDraft = false }: Generat
         yPos += 5;
         doc.setFont("helvetica", "bold");
         doc.text("Additional Services", 15, yPos);
-        yPos += 5;
-        doc.setFont("helvetica", "normal");
+        yPos += 7;
 
+        // Accessorial Table Header
+        doc.setFillColor(240, 240, 240);
+        doc.rect(15, yPos - 5, 180, 7, "F");
+        doc.setFontSize(9);
+        doc.text("Description", 17, yPos);
+        doc.text("Condition / Notes", 100, yPos);
+        doc.text("Rate", 193, yPos, { align: "right" });
+        yPos += 7;
+
+        doc.setFont("helvetica", "normal");
         accessorials.forEach(acc => {
-            doc.text(`${acc.name}${acc.notes ? ` (${acc.notes})` : ''}`, 15, yPos);
-            doc.text(`$${Number(acc.cost).toFixed(2)}`, 195, yPos, { align: "right" });
-            yPos += 5;
+            const name = acc.name || "Accessorial";
+            const note = acc.notes || "-";
+            const cost = `$${Number(acc.cost).toFixed(2)}`;
+
+            doc.text(name, 17, yPos);
+            doc.text(note, 100, yPos);
+            doc.text(cost, 193, yPos, { align: "right" });
+            yPos += 6;
         });
+    }
+
+    const notes = getValue("notes");
+    if (notes) {
+        yPos += 5;
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(10);
+        doc.text("Notes / Terms", 15, yPos);
+        yPos += 5;
+
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(9);
+        const splitNotes = doc.splitTextToSize(notes, 180);
+        doc.text(splitNotes, 15, yPos);
+        yPos += (splitNotes.length * 5);
     }
 
     yPos += 5;

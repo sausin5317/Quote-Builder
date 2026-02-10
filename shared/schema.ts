@@ -109,6 +109,7 @@ export const quotes = pgTable("quotes", {
   ratePerTon: numeric("rate_per_ton"),
 
   accessorials: json("accessorials").$type<AccessorialCharge[]>().default([]),
+  notes: text("notes"),
 
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),

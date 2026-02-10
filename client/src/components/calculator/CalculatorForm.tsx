@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { generateQuotePDF } from "@/lib/pdf-generator";
+import { calculateDistance } from "@/lib/map-service";
 import { Lane, InsertQuote, Client } from "@shared/schema";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -70,6 +71,7 @@ export function CalculatorForm({ lane, selectedClientId }: CalculatorFormProps) 
     destinationOverride: "",
     productOverride: "Sulfur",
     accessorials: [] as AccessorialCharge[],
+    notes: "",
   };
 
   const [values, setValues] = useState(defaultValues);
@@ -101,6 +103,7 @@ export function CalculatorForm({ lane, selectedClientId }: CalculatorFormProps) 
         destinationOverride: lane.destination,
         productOverride: lane.product,
         accessorials: [],
+        notes: "",
       });
     } else {
       // If "New Lane" (null lane), just update client ID if it changed, keep other edits or reset?
@@ -111,6 +114,30 @@ export function CalculatorForm({ lane, selectedClientId }: CalculatorFormProps) 
       }));
     }
   }, [lane, selectedClientId]);
+
+  // Auto-calculate distance
+  useEffect(() => {
+    const calcDist = async () => {
+      console.log("Calculator: Checking auto-calc conditions...", { origin: values.originOverride, dest: values.destinationOverride, hasLane: !!lane });
+      if (values.originOverride && values.destinationOverride && !lane) {
+        console.log("Calculator: Triggering calculation...");
+        const dist = await calculateDistance(values.originOverride, values.destinationOverride);
+        console.log("Calculator: Received distance:", dist);
+        if (dist && dist !== "0") {
+          setValues(prev => ({ ...prev, distance: dist }));
+        }
+      }
+    };
+
+    // We need a timer to debounce
+    const timer = setTimeout(() => {
+      if (values.originOverride && values.destinationOverride) {
+        calcDist();
+      }
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [values.originOverride, values.destinationOverride]);
 
   const handleChange = (key: string, value: string | boolean) => {
     setValues(prev => ({ ...prev, [key]: value }));
@@ -201,6 +228,7 @@ export function CalculatorForm({ lane, selectedClientId }: CalculatorFormProps) 
         originOverride: values.originOverride || null,
         destinationOverride: values.destinationOverride || null,
         accessorials: values.accessorials,
+        notes: values.notes || null,
       });
 
       toast({
@@ -220,7 +248,7 @@ export function CalculatorForm({ lane, selectedClientId }: CalculatorFormProps) 
 
   const handleExportPDF = () => {
     generateQuotePDF({
-      quote: values,
+      quote: { ...values, notes: values.notes },
       clientName: clients?.find(c => c.id.toString() === values.clientId)?.name || values.customerName,
       isDraft: true
     });
@@ -453,9 +481,14 @@ export function CalculatorForm({ lane, selectedClientId }: CalculatorFormProps) 
             </div>
             <Separator className="my-2" />
             <div className="flex justify-between text-xs">
-              <span className="text-gray-500 font-medium">Internal Notes:</span>
+              <span className="text-gray-500 font-medium">Notes / Terms:</span>
             </div>
-            <Textarea placeholder="Add notes..." className="h-10 text-xs resize-none" />
+            <Textarea
+              placeholder="Enter specific notes, terms, or instructions..."
+              className="h-20 text-xs resize-none"
+              value={values.notes}
+              onChange={(e) => setValues({ ...values, notes: e.target.value })}
+            />
           </div>
 
           <div className="bg-white rounded-md border border-gray-200 p-3 space-y-3">

@@ -13,6 +13,7 @@ import Settings from "@/pages/Settings";
 import Dashboard from "@/pages/Dashboard";
 import Clients from "@/pages/Clients";
 import AuthPage from "@/pages/auth-page";
+import UsersPage from "@/pages/Users";
 import { useEffect } from "react";
 
 function ProtectedRoute({ component: Component, path }: { component: React.ComponentType, path: string }) {
@@ -60,6 +61,26 @@ function Router() {
 }
 
 function App() {
+  // Load Google Maps script dynamically with API key from environment
+  useEffect(() => {
+    const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+    if (!apiKey) {
+      console.warn("Google Maps API key not found. Location search will not work.");
+      return;
+    }
+
+    // Check if script is already loaded
+    if (document.querySelector('script[src*="maps.googleapis.com"]')) {
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&loading=async&v=weekly`;
+    script.async = true;
+    script.defer = true;
+    document.head.appendChild(script);
+  }, []);
+
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>

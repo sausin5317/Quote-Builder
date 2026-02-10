@@ -17,7 +17,7 @@ import {
   type InsertProduct,
   type QuoteWithLane,
 } from "@shared/schema";
-import { eq, sql, and, gte, lte } from "drizzle-orm";
+import { eq, sql, and, gte, lte, ilike, or, count, asc, desc } from "drizzle-orm";
 
 export interface IStorage {
   // Clients
@@ -36,13 +36,19 @@ export interface IStorage {
   // Products
   getProducts(): Promise<Product[]>;
   createProduct(product: InsertProduct): Promise<Product>;
+  deleteProduct(id: number): Promise<void>;
 
   // Lanes
   getLanes(): Promise<Lane[]>;
   getLanesByClient(clientId: number): Promise<Lane[]>;
   getLane(id: number): Promise<Lane | undefined>;
   createLane(lane: InsertLane): Promise<Lane>;
+  updateLane(id: number, lane: Partial<InsertLane>): Promise<Lane>;
+  deleteLane(id: number): Promise<void>;
   clearLanes(): Promise<void>;
+  searchLanes(params: { search?: string; product?: string; page: number; pageSize: number }): Promise<{ lanes: Lane[]; total: number }>;
+  findDuplicateLanes(): Promise<{ origin: string; destination: string; product: string; count: number; ids: number[] }[]>;
+  getDistinctLaneProducts(): Promise<string[]>;
 
   // Quotes
   getQuotes(): Promise<QuoteWithLane[]>;
@@ -118,6 +124,10 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
+  async deleteProduct(id: number): Promise<void> {
+    await db.delete(products).where(eq(products.id, id));
+  }
+
   // Lanes
   async getLanes(): Promise<Lane[]> {
     return await db.select().from(lanes);
@@ -140,8 +150,57 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
+  async updateLane(id: number, lane: Partial<InsertLane>): Promise<Lane> {
+    const [updated] = await db
+      .update(lanes)
+      .set(lane)
+      .where(eq(lanes.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteLane(id: number): Promise<void> {
+    await db.delete(lanes).where(eq(lanes.id, id));
+  }
+
   async clearLanes(): Promise<void> {
     await db.delete(lanes);
+  }
+
+  async searchLanes(params: { search?: string; product?: string; page: number; pageSize: number }): Promise<{ lanes: Lane[]; total: number }> {
+    const conditions = [];
+    if (params.search) {
+      const term = `%${params.search}%`;
+      conditions.push(or(ilike(lanes.origin, term), ilike(lanes.destination, term)));
+    }
+    if (params.product) {
+      conditions.push(eq(lanes.product, params.product));
+    }
+
+    const where = conditions.length > 0 ? and(...conditions) : undefined;
+    const offset = (params.page - 1) * params.pageSize;
+
+    const [totalResult] = await db.select({ count: count() }).from(lanes).where(where);
+    const results = await db.select().from(lanes).where(where).orderBy(asc(lanes.id)).limit(params.pageSize).offset(offset);
+
+    return { lanes: results, total: totalResult.count };
+  }
+
+  async findDuplicateLanes(): Promise<{ origin: string; destination: string; product: string; count: number; ids: number[] }[]> {
+    const dupes = await db.execute(sql`
+      SELECT origin, destination, product, COUNT(*)::int as count,
+             ARRAY_AGG(id ORDER BY id) as ids
+      FROM lanes
+      GROUP BY origin, destination, product
+      HAVING COUNT(*) > 1
+      ORDER BY COUNT(*) DESC
+    `);
+    return (dupes.rows || []) as any;
+  }
+
+  async getDistinctLaneProducts(): Promise<string[]> {
+    const result = await db.selectDistinct({ product: lanes.product }).from(lanes).orderBy(asc(lanes.product));
+    return result.map(r => r.product);
   }
 
   // Quotes

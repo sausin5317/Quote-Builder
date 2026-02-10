@@ -111,3 +111,8 @@
 .dark .glass-panel {
   @apply bg-black/40 border-white/10;
 }
+
+/* Fix Google Maps Autocomplete z-index in Modals */
+.pac-container {
+  z-index: 10000 !important;
+}
