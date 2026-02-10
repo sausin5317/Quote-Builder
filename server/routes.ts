@@ -55,18 +55,25 @@ export async function registerRoutes(
   // === USERS API ===
   app.get(api.users.list.path, async (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
+    // Only admins see all users
+    if (req.user.role !== "admin") return res.sendStatus(403);
     const users = await storage.getUsers();
     res.json(users);
   });
 
   app.post(api.users.create.path, async (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
-    // Only admins should create users directly via API, others use register
-    if (req.user?.role !== "admin") return res.sendStatus(403);
+    // Only admins should create users
+    if (req.user.role !== "admin") return res.sendStatus(403);
 
     try {
       const input = api.users.create.input.parse(req.body);
-      // Hash password if provided, though this endpoint might rely on raw schema
+
+      const existingUsers = await storage.getUsers();
+      if (existingUsers.some(u => u.username === input.username)) {
+        return res.status(400).json({ message: "Username already exists" });
+      }
+
       const hashedPassword = await hashPassword(input.password || "password123");
       const user = await storage.createUser({ ...input, password: hashedPassword });
       res.status(201).json(user);
@@ -75,6 +82,52 @@ export async function registerRoutes(
         return res.status(400).json({ message: err.errors[0].message });
       }
       throw err;
+    }
+  });
+
+  // Admin: Reset Password
+  app.put("/api/users/:id/password", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    if (req.user.role !== "admin") return res.sendStatus(403);
+
+    try {
+      const userId = Number(req.params.id);
+      const { password } = z.object({ password: z.string().min(6) }).parse(req.body);
+      const hashedPassword = await hashPassword(password);
+
+      // We need a storage method to update password/user. 
+      // Ideally storage should have updateUser, but for now we might need to add it or generic update.
+      // Assuming storage.updateUser exists or we implement it. 
+      // Wait, I need to check if storage.updateUser exists. 
+      // Checking storage.ts might be needed. For now I will assume I need to add it to storage interface.
+      // Actually, I should check storage.ts first. 
+      // Let's defer this implementation slightly or assume I'll add it to storage next.
+      // I'll stick to defining routes and will fix storage in next step.
+      await storage.updateUser(userId, { password: hashedPassword });
+      res.json({ message: "Password updated" });
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
+      res.status(500).json({ message: "Failed to update password" });
+    }
+  });
+
+  // Admin: Delete User
+  app.delete("/api/users/:id", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    if (req.user.role !== "admin") return res.sendStatus(403);
+
+    // Prevent deleting self
+    if (req.user.id === Number(req.params.id)) {
+      return res.status(400).json({ message: "Cannot delete your own account" });
+    }
+
+    try {
+      await storage.deleteUser(Number(req.params.id));
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to delete user" });
     }
   });
 
@@ -229,6 +282,8 @@ export async function registerRoutes(
 
   app.post(api.quotes.create.path, async (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
+    if (req.user.role === "viewer") return res.status(403).json({ message: "Viewers cannot create quotes" });
+
     try {
       const input = api.quotes.create.input.parse(req.body);
       const quote = await storage.createQuote(input);
@@ -246,9 +301,22 @@ export async function registerRoutes(
 
   app.put(api.quotes.update.path, async (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
+    if (req.user.role === "viewer") return res.status(403).json({ message: "Viewers cannot update quotes" });
+
     try {
+      const quoteId = Number(req.params.id);
+      const currentQuote = await storage.getQuote(quoteId);
+
+      if (!currentQuote) return res.status(404).json({ message: "Quote not found" });
+
+      // Quoters cannot edit Approved/Rejected quotes, but Admins/Approvers can (or maybe restriction applies to all?)
+      // Let's say once Approved, only Admin/Approver can edit.
+      if (currentQuote.status === "Approved" && req.user.role === "quoter") {
+        return res.status(403).json({ message: "Cannot edit approved quotes" });
+      }
+
       const input = api.quotes.update.input.parse(req.body);
-      const quote = await storage.updateQuote(Number(req.params.id), input);
+      const quote = await storage.updateQuote(quoteId, input);
       res.json(quote);
     } catch (err) {
       if (err instanceof z.ZodError) {
@@ -272,8 +340,8 @@ export async function registerRoutes(
     if (!req.isAuthenticated()) return res.sendStatus(401);
 
     // Strict role-based access control
-    if (req.user.role !== "admin" && req.user.role !== "manager") {
-      return res.status(403).json({ message: "Only admins or managers can approve quotes" });
+    if (req.user.role !== "admin" && req.user.role !== "approver") {
+      return res.status(403).json({ message: "Only admins or approvers can approve quotes" });
     }
 
     try {

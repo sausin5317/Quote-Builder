@@ -26,23 +26,7 @@ interface LocationSearchInputProps {
 }
 
 // Mock suggestions for testing without API key
-const MOCK_PLACES = [
-    { place_id: "mock-ny", description: "New York, NY, USA" },
-    { place_id: "mock-la", description: "Los Angeles, CA, USA" },
-    { place_id: "mock-chi", description: "Chicago, IL, USA" },
-    { place_id: "mock-hou", description: "Houston, TX, USA" },
-    { place_id: "mock-phx", description: "Phoenix, AZ, USA" },
-    { place_id: "mock-phi", description: "Philadelphia, PA, USA" },
-    { place_id: "mock-sa", description: "San Antonio, TX, USA" },
-    { place_id: "mock-sd", description: "San Diego, CA, USA" },
-    { place_id: "mock-dal", description: "Dallas, TX, USA" },
-    { place_id: "mock-sj", description: "San Jose, CA, USA" },
-    { place_id: "mock-tor", description: "Toronto, ON, Canada" },
-    { place_id: "mock-van", description: "Vancouver, BC, Canada" },
-    { place_id: "mock-mtl", description: "Montreal, QC, Canada" },
-    { place_id: "mock-ldn", description: "London, UK" },
-    { place_id: "mock-par", description: "Paris, France" },
-];
+
 
 export function LocationSearchInput({
     value,
@@ -67,15 +51,9 @@ export function LocationSearchInput({
     });
 
     // Mock logic: Use mock data if API is not ready (missing key)
-    const displayedData = ready
-        ? data
-        : MOCK_PLACES.filter(p =>
-            p.description.toLowerCase().includes((searchValue || "").toLowerCase())
-        );
+    const displayedData = data;
 
-    const displayedStatus = ready
-        ? status
-        : (displayedData.length > 0 ? "OK" : "ZERO_RESULTS");
+    const displayedStatus = status;
 
     // Sync internal search state if external value changes (optional)
     useEffect(() => {
@@ -126,7 +104,6 @@ export function LocationSearchInput({
                                     >
                                         <MapPin className="mr-2 h-4 w-4 shrink-0 opacity-50" />
                                         {description}
-                                        {!ready && <span className="ml-auto text-[10px] text-slate-400 bg-slate-100 px-1 rounded">MOCK</span>}
                                     </CommandItem>
                                 ))}
                             {displayedStatus === "ZERO_RESULTS" && (

@@ -1,4 +1,4 @@
-import { pgTable, text, serial, numeric, timestamp, integer, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, numeric, timestamp, integer, boolean, json } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -54,6 +54,16 @@ export const lanes = pgTable("lanes", {
   ownerOperatorOwnPay: numeric("oo_own_pay").default("130"),
 });
 
+export type AccessorialCharge = {
+  id: string;
+  name: string;
+  cost: number;
+  notes: string;
+  driverPay: number;
+  ooBiziPay: number;
+};
+
+
 // Saved quotes/drafts with enhanced workflow
 export const quotes = pgTable("quotes", {
   id: serial("id").primaryKey(),
@@ -98,6 +108,8 @@ export const quotes = pgTable("quotes", {
   totalCost: numeric("total_cost"),
   ratePerTon: numeric("rate_per_ton"),
 
+  accessorials: json("accessorials").$type<AccessorialCharge[]>().default([]),
+
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -121,10 +133,19 @@ export type InsertLane = z.infer<typeof insertLaneSchema>;
 export type Quote = typeof quotes.$inferSelect;
 export type InsertQuote = z.infer<typeof insertQuoteSchema>;
 
+// Quote with joined Lane details
+export type QuoteWithLane = Quote & {
+  origin?: string | null;
+  destination?: string | null;
+  product?: string | null;
+};
+
 // Quote Status Types
 export const QUOTE_STATUSES = ["Draft", "Pending Review", "Approved", "Rejected"] as const;
 export type QuoteStatus = typeof QUOTE_STATUSES[number];
 
 // User Roles
-export const USER_ROLES = ["admin", "manager", "viewer"] as const;
+export const USER_ROLES = ["admin", "approver", "quoter", "viewer"] as const;
 export type UserRole = typeof USER_ROLES[number];
+
+

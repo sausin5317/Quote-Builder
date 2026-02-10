@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { jsPDF } from "jspdf";
+import { generateQuotePDF } from "@/lib/pdf-generator";
 import { Lane, InsertQuote, Client } from "@shared/schema";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -8,10 +8,13 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { Clock, DollarSign, Fuel, Truck, Save, FileText, Send, Plus, CheckCircle } from "lucide-react";
+import { Clock, DollarSign, Fuel, Truck, Save, FileText, Send, Plus, CheckCircle, ArrowRight, AlertTriangle, Check, ShieldCheck } from "lucide-react";
 import { useCreateQuote } from "@/hooks/use-quotes";
 import { useToast } from "@/hooks/use-toast";
+import { LocationSearchInput } from "@/components/ui/start-location-search";
+import { useAuth } from "@/hooks/use-auth";
 import { useQuery } from "@tanstack/react-query";
+import { cn } from "@/lib/utils";
 import {
   Select,
   SelectContent,
@@ -19,75 +22,95 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { LocationSearchInput } from "@/components/ui/start-location-search";
+import { AccessorialsTable } from "./AccessorialsTable";
+import { AccessorialCharge } from "@shared/schema";
+
 
 interface CalculatorFormProps {
-  lane: Lane;
+  lane: Lane | null; // Allow null for new lanes
+  selectedClientId?: number | null; // Add prop
 }
 
-export function CalculatorForm({ lane }: CalculatorFormProps) {
+const PRODUCT_TYPES = ["Sulfur", "Bentonite", "PAC", "ACH", "Caustic", "Acid", "Other"];
+
+export function CalculatorForm({ lane, selectedClientId }: CalculatorFormProps) {
   const { toast } = useToast();
+  const { user } = useAuth();
   const createQuote = useCreateQuote();
 
   const { data: clients } = useQuery<Client[]>({
     queryKey: ['/api/clients'],
   });
 
-  const [values, setValues] = useState({
-    distance: lane.distance,
-    speed: lane.speed,
-    loadTime: lane.loadTime,
-    unloadTime: lane.unloadTime,
+  // Default blank values
+  const defaultValues = {
+    distance: "0",
+    speed: "80", // Default speed
+    loadTime: "1",
+    unloadTime: "1",
     standbyTime: "0",
-    mtPerLoad: lane.minTons,
+    mtPerLoad: "0",
     isRoundTrip: true,
 
-    driveRate: lane.ratePerHour || "0",
-    loadRate: lane.ratePerHour || "0",
-    unloadRate: lane.ratePerHour || "0",
-    fuelSurcharge: lane.fuelSurcharge || "0",
-    chainsFee: lane.chainsFee || "0",
+    driveRate: "0",
+    loadRate: "0",
+    unloadRate: "0",
+    fuelSurcharge: "0",
+    chainsFee: "0",
     miscCharges: "0",
     miscChargesDescription: "",
 
-    driverTarget: lane.driverTargetPay || "0",
-    ooBiziTarget: lane.ownerOperatorBiziPay || "0",
-    ooOwnTarget: lane.ownerOperatorOwnPay || "0",
+    driverTarget: "0",
+    ooBiziTarget: "0",
+    ooOwnTarget: "0",
 
     customerName: "",
-    clientId: "",
-    originOverride: lane.origin,
-    destinationOverride: lane.destination,
-  });
+    clientId: selectedClientId?.toString() || "", // Init with prop
+    originOverride: "",
+    destinationOverride: "",
+    productOverride: "Sulfur",
+    accessorials: [] as AccessorialCharge[],
+  };
 
+  const [values, setValues] = useState(defaultValues);
+
+  // Sync state when dependencies change (lane or selectedClientId)
   useEffect(() => {
-    setValues({
-      distance: lane.distance,
-      speed: lane.speed,
-      loadTime: lane.loadTime,
-      unloadTime: lane.unloadTime,
-      standbyTime: "0",
-      mtPerLoad: lane.minTons,
-      isRoundTrip: true,
-
-      driveRate: lane.ratePerHour || "0",
-      loadRate: lane.ratePerHour || "0",
-      unloadRate: lane.ratePerHour || "0",
-      fuelSurcharge: lane.fuelSurcharge || "0",
-      chainsFee: lane.chainsFee || "0",
-      miscCharges: "0",
-      miscChargesDescription: "",
-
-      driverTarget: lane.driverTargetPay || "0",
-      ooBiziTarget: lane.ownerOperatorBiziPay || "0",
-      ooOwnTarget: lane.ownerOperatorOwnPay || "0",
-
-      customerName: "",
-      clientId: "",
-      originOverride: lane.origin,
-      destinationOverride: lane.destination,
-    });
-  }, [lane]);
+    if (lane) {
+      setValues({
+        distance: lane.distance,
+        speed: lane.speed,
+        loadTime: lane.loadTime,
+        unloadTime: lane.unloadTime,
+        standbyTime: "0",
+        mtPerLoad: lane.minTons,
+        isRoundTrip: true,
+        driveRate: lane.ratePerHour || "0",
+        loadRate: lane.ratePerHour || "0",
+        unloadRate: lane.ratePerHour || "0",
+        fuelSurcharge: lane.fuelSurcharge || "0",
+        chainsFee: lane.chainsFee || "0",
+        miscCharges: "0",
+        miscChargesDescription: "",
+        driverTarget: lane.driverTargetPay || "0",
+        ooBiziTarget: lane.ownerOperatorBiziPay || "0",
+        ooOwnTarget: lane.ownerOperatorOwnPay || "0",
+        customerName: "",
+        clientId: selectedClientId?.toString() || "",
+        originOverride: lane.origin,
+        destinationOverride: lane.destination,
+        productOverride: lane.product,
+        accessorials: [],
+      });
+    } else {
+      // If "New Lane" (null lane), just update client ID if it changed, keep other edits or reset?
+      // For now, let's just ensure client ID is synced if it's not set
+      setValues(prev => ({
+        ...prev,
+        clientId: selectedClientId?.toString() || prev.clientId
+      }));
+    }
+  }, [lane, selectedClientId]);
 
   const handleChange = (key: string, value: string | boolean) => {
     setValues(prev => ({ ...prev, [key]: value }));
@@ -99,6 +122,8 @@ export function CalculatorForm({ lane }: CalculatorFormProps) {
   const unloadTime = parseFloat(values.unloadTime || "0");
   const standbyTime = parseFloat(values.standbyTime || "0");
   const driveRate = parseFloat(values.driveRate || "0");
+  const loadRate = parseFloat(values.loadRate || "0");
+  const unloadRate = parseFloat(values.unloadRate || "0");
   const fuelSurchargePercent = parseFloat(values.fuelSurcharge || "0");
   const chainsFee = parseFloat(values.chainsFee || "0");
   const miscCharges = parseFloat(values.miscCharges || "0");
@@ -107,12 +132,30 @@ export function CalculatorForm({ lane }: CalculatorFormProps) {
   const distanceMultiplier = values.isRoundTrip ? 2 : 1;
   const driveHours = (distance * distanceMultiplier) / speed;
   const totalHours = driveHours + loadTime + unloadTime + standbyTime;
-  const baseRevenue = totalHours * driveRate;
+
+  const driveRevenue = driveHours * driveRate;
+  const loadRevenue = loadTime * loadRate;
+  const unloadRevenue = unloadTime * unloadRate;
+  const standbyRevenue = standbyTime * loadRate;
+
+  const baseRevenue = driveRevenue + loadRevenue + unloadRevenue + standbyRevenue;
+
   const fuelRevenue = baseRevenue * (fuelSurchargePercent / 100);
-  const totalTripPrice = baseRevenue + fuelRevenue + chainsFee + miscCharges;
+
+  const accessorialsCost = values.accessorials.reduce((sum, item) => sum + (Number(item.cost) || 0), 0);
+  const totalTripPrice = baseRevenue + fuelRevenue + chainsFee + miscCharges + accessorialsCost;
 
   const driverTarget = parseFloat(values.driverTarget || "0");
-  const driverPay = totalHours * driverTarget;
+  const ooBiziTarget = parseFloat(values.ooBiziTarget || "0");
+  const ooOwnTarget = parseFloat(values.ooOwnTarget || "0");
+
+  const accessorialsDriverPay = values.accessorials.reduce((sum, item) => sum + (Number(item.driverPay) || 0), 0);
+  const accessorialsOOBiziPay = values.accessorials.reduce((sum, item) => sum + (Number(item.ooBiziPay) || 0), 0);
+
+  const driverPay = (totalHours * driverTarget) + accessorialsDriverPay;
+  const ooBiziPay = (totalHours * ooBiziTarget) + accessorialsOOBiziPay;
+  const ooOwnPay = totalHours * ooOwnTarget; // User didn't ask for O/O Own Pay accessorials column yet
+
   const margin = totalTripPrice - driverPay;
   const hourlyMargin = totalHours > 0 ? margin / totalHours : 0;
   const ratePerTon = mtPerLoad > 0 ? totalTripPrice / mtPerLoad : 0;
@@ -131,10 +174,10 @@ export function CalculatorForm({ lane }: CalculatorFormProps) {
 
     try {
       await createQuote.mutateAsync({
-        laneId: lane.id,
+        laneId: lane?.id ?? null,
         clientId: values.clientId ? parseInt(values.clientId) : null,
         customerName: values.customerName || selectedClient?.name || "",
-        status,
+        status, // Draft, Pending Review, or Approved
         distance: values.distance,
         speed: values.speed,
         loadTime: values.loadTime,
@@ -157,13 +200,14 @@ export function CalculatorForm({ lane }: CalculatorFormProps) {
         ratePerTon: ratePerTon.toFixed(2),
         originOverride: values.originOverride || null,
         destinationOverride: values.destinationOverride || null,
+        accessorials: values.accessorials,
       });
 
       toast({
-        title: status === "Pending Review" ? "Quote Submitted" : "Quote Saved",
+        title: status === "Pending Review" ? "Quote Submitted" : (status === "Approved" ? "Quote Approved" : "Quote Saved"),
         description: status === "Pending Review"
           ? "Quote has been submitted for review."
-          : `Draft for ${values.customerName || selectedClient?.name} saved successfully.`,
+          : (status === "Approved" ? "Quote has been approved successfully." : "Draft saved successfully."),
       });
     } catch (error) {
       toast({
@@ -174,347 +218,279 @@ export function CalculatorForm({ lane }: CalculatorFormProps) {
     }
   };
 
-  return (
-    <div className="space-y-6">
-      <div className="bg-[#0f172a] text-white rounded-xl p-6 shadow-md border border-slate-800">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div>
+  const handleExportPDF = () => {
+    generateQuotePDF({
+      quote: values,
+      clientName: clients?.find(c => c.id.toString() === values.clientId)?.name || values.customerName,
+      isDraft: true
+    });
+  };
 
-            <div className="flex flex-col md:flex-row items-center gap-3">
-              <div className="flex-1">
-                <Label className="text-[10px] text-blue-400 font-bold uppercase tracking-widest mb-1.5 block">Origin Override</Label>
-                <LocationSearchInput
-                  className="bg-slate-900 border-slate-700 text-white font-display font-bold text-lg h-10 w-full"
-                  placeholder={lane.origin}
-                  value={values.originOverride}
-                  onChange={(v) => handleChange("originOverride", v)}
-                />
-              </div>
-              <span className="text-slate-500 mx-2 mt-6">→</span>
-              <div className="flex-1">
-                <Label className="text-[10px] text-blue-400 font-bold uppercase tracking-widest mb-1.5 block">Destination Override</Label>
-                <LocationSearchInput
-                  className="bg-slate-900 border-slate-700 text-white font-display font-bold text-lg h-10 w-full"
-                  placeholder={lane.destination}
-                  value={values.destinationOverride}
-                  onChange={(v) => handleChange("destinationOverride", v)}
-                />
-              </div>
+  return (
+    <div className="flex flex-col h-full bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+      {/* Header */}
+      <div className="p-4 border-b border-gray-100 flex flex-col gap-4 bg-white">
+        <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between">
+          <div className="flex flex-1 gap-2 items-center w-full lg:w-auto">
+            <div className="flex-1 min-w-[200px]">
+              <Label className="text-xs text-gray-500 mb-1 block">Origin</Label>
+              <LocationSearchInput
+                value={values.originOverride}
+                onChange={(v) => handleChange("originOverride", v)}
+                placeholder="Search Origin..."
+                className="h-8 text-sm"
+              />
             </div>
-            <div className="flex gap-3 mt-3 flex-wrap">
-              <span className="bg-blue-500/10 text-blue-400 text-xs px-2.5 py-1 rounded border border-blue-500/20 font-bold uppercase">{lane.product}</span>
-              <span className="bg-slate-800 text-slate-300 text-xs px-2.5 py-1 rounded border border-slate-700 flex items-center gap-1 font-mono">
-                <Truck className="w-3 h-3" /> {lane.distance} KM
-              </span>
-              {values.isRoundTrip && (
-                <span className="bg-emerald-500/10 text-emerald-400 text-xs px-2.5 py-1 rounded border border-emerald-500/20 font-bold uppercase">Round Trip</span>
-              )}
+            <ArrowRight className="w-4 h-4 text-gray-300 mt-5" />
+            <div className="flex-1 min-w-[200px]">
+              <Label className="text-xs text-gray-500 mb-1 block">Destination</Label>
+              <LocationSearchInput
+                value={values.destinationOverride}
+                onChange={(v) => handleChange("destinationOverride", v)}
+                placeholder="Search Destination..."
+                className="h-8 text-sm"
+              />
             </div>
           </div>
 
-          <div className="w-full md:w-auto space-y-3">
-            <div className="bg-slate-800/50 p-3 rounded-lg border border-slate-700">
-              <Label className="text-[10px] font-bold text-slate-400 mb-1.5 block uppercase tracking-wider">Client</Label>
-              <Select value={values.clientId} onValueChange={(v) => handleChange("clientId", v)}>
-                <SelectTrigger className="bg-slate-900 border-slate-700 text-white h-9 text-sm w-full md:w-64" data-testid="select-client">
-                  <SelectValue placeholder="Select a client..." />
+          <div className="flex items-center gap-4">
+            <div className="flex flex-col">
+              <Label className="text-xs text-gray-500 mb-1 block">Product</Label>
+              <Select value={values.productOverride} onValueChange={(v) => handleChange("productOverride", v)}>
+                <SelectTrigger className="h-8 w-32 text-xs">
+                  <SelectValue>{values.productOverride}</SelectValue>
                 </SelectTrigger>
                 <SelectContent>
-                  {clients?.map(client => (
-                    <SelectItem key={client.id} value={client.id.toString()}>
-                      {client.name}
-                    </SelectItem>
-                  ))}
+                  {PRODUCT_TYPES.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
-            {!values.clientId && (
-              <div className="bg-slate-800/50 p-3 rounded-lg border border-slate-700">
-                <Label className="text-[10px] font-bold text-slate-400 mb-1.5 block uppercase tracking-wider">Or Customer Name</Label>
-                <Input
-                  placeholder="Enter Customer Name..."
-                  className="bg-slate-900 border-slate-700 text-white h-9 text-sm w-full md:w-64"
-                  value={values.customerName}
-                  onChange={(e) => handleChange("customerName", e.target.value)}
-                  data-testid="input-customer-name"
-                />
-              </div>
-            )}
+
+            <div className="flex gap-2 mt-5">
+              <Button variant="outline" size="sm" onClick={() => handleSave("Draft")} disabled={createQuote.isPending || user?.role === "viewer"} className="h-8">
+                <Save className="w-3 h-3 mr-2" /> Save Draft
+              </Button>
+              {(user?.role === "admin" || user?.role === "approver") && (
+                <Button
+                  variant="default"
+                  size="sm"
+                  className="bg-green-600 hover:bg-green-700 text-white h-8"
+                  onClick={() => handleSave("Approved")}
+                  disabled={createQuote.isPending}
+                >
+                  <ShieldCheck className="w-3 h-3 mr-2" /> Approve
+                </Button>
+              )}
+            </div>
           </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        <div className="lg:col-span-8 space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Card className="p-5 shadow-sm border-slate-200">
-              <div className="flex items-center justify-between mb-5">
-                <div className="flex items-center gap-2 text-slate-800 font-bold text-sm uppercase tracking-tight">
-                  <Clock className="w-4 h-4 text-blue-600" />
-                  <h3>Trip & Time</h3>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Label htmlFor="round-trip" className="text-xs text-slate-500">Round Trip</Label>
-                  <Switch
-                    id="round-trip"
-                    checked={values.isRoundTrip}
-                    onCheckedChange={(v) => handleChange("isRoundTrip", v)}
-                    data-testid="switch-round-trip"
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-slate-500 font-semibold">KM (One-Way)</Label>
-                  <Input className="h-9 text-sm font-mono" type="number" value={values.distance} onChange={(e) => handleChange("distance", e.target.value)} data-testid="input-distance" />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-slate-500 font-semibold">Speed (KM/H)</Label>
-                  <Input className="h-9 text-sm font-mono" type="number" value={values.speed} onChange={(e) => handleChange("speed", e.target.value)} data-testid="input-speed" />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-slate-500 font-semibold">Load Hours</Label>
-                  <Input className="h-9 text-sm font-mono" type="number" value={values.loadTime} onChange={(e) => handleChange("loadTime", e.target.value)} data-testid="input-load-time" />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-slate-500 font-semibold">Unload Hours</Label>
-                  <Input className="h-9 text-sm font-mono" type="number" value={values.unloadTime} onChange={(e) => handleChange("unloadTime", e.target.value)} data-testid="input-unload-time" />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-slate-500 font-semibold">Standby Hours</Label>
-                  <Input className="h-9 text-sm font-mono" type="number" value={values.standbyTime} onChange={(e) => handleChange("standbyTime", e.target.value)} data-testid="input-standby-time" />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-slate-500 font-semibold">MT Per Load</Label>
-                  <Input className="h-9 text-sm font-mono" type="number" value={values.mtPerLoad} onChange={(e) => handleChange("mtPerLoad", e.target.value)} data-testid="input-mt-per-load" />
-                </div>
-              </div>
-            </Card>
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50">
 
-            <Card className="p-5 shadow-sm border-slate-200">
-              <div className="flex items-center gap-2 mb-5 text-slate-800 font-bold text-sm uppercase tracking-tight">
-                <DollarSign className="w-4 h-4 text-blue-600" />
-                <h3>Rates & Surcharges</h3>
+        {/* Trip & Time */}
+        <Card className="p-4 shadow-sm border-gray-200">
+          <h3 className="text-sm font-bold text-gray-800 mb-3">Trip & Time</h3>
+          <div className="flex flex-wrap gap-4 items-end">
+            <div className="w-32">
+              <Label className="text-xs text-gray-500">One-Way KM</Label>
+              <Input className="h-8 mt-1" type="number" value={values.distance} onChange={(e) => handleChange("distance", e.target.value)} />
+            </div>
+            <div className="w-32">
+              <Label className="text-xs text-gray-500">Speed (KM/H)</Label>
+              <Input className="h-8 mt-1" type="number" value={values.speed} onChange={(e) => handleChange("speed", e.target.value)} />
+            </div>
+            <div className="w-24">
+              <Label className="text-xs text-gray-500">Load Hrs</Label>
+              <Input className="h-8 mt-1" type="number" value={values.loadTime} onChange={(e) => handleChange("loadTime", e.target.value)} />
+            </div>
+            <div className="w-24">
+              <Label className="text-xs text-gray-500">Unload Hrs</Label>
+              <Input className="h-8 mt-1" type="number" value={values.unloadTime} onChange={(e) => handleChange("unloadTime", e.target.value)} />
+            </div>
+            <div className="w-24">
+              <Label className="text-xs text-gray-500">Standby Hrs</Label>
+              <Input className="h-8 mt-1" type="number" value={values.standbyTime} onChange={(e) => handleChange("standbyTime", e.target.value)} />
+            </div>
+            <div className="w-32">
+              <Label className="text-xs text-gray-500">MT Per Load</Label>
+              <Input className="h-8 mt-1" type="number" value={values.mtPerLoad} onChange={(e) => handleChange("mtPerLoad", e.target.value)} />
+            </div>
+            <div className="flex items-center gap-2 mb-2 ml-4">
+              <Switch checked={values.isRoundTrip} onCheckedChange={(v) => handleChange("isRoundTrip", v)} id="rt-switch" />
+              <Label htmlFor="rt-switch" className="text-xs font-medium">Round Trip</Label>
+            </div>
+          </div>
+        </Card>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+
+          {/* Rates & Surcharges */}
+          <Card className="p-4 shadow-sm border-gray-200 bg-slate-50/50">
+            <h3 className="text-sm font-bold text-gray-800 mb-3">Rates & Surcharges</h3>
+            <div className="space-y-2">
+              <div className="grid grid-cols-2 gap-2 items-center">
+                <Label className="text-xs text-gray-500">Drive Rate ($/HR)</Label>
+                <Input className="h-8 text-right bg-white" type="number" value={values.driveRate} onChange={(e) => handleChange("driveRate", e.target.value)} />
               </div>
-              <div className="space-y-4">
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-slate-500 font-semibold">Drive Rate ($/HR)</Label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs">$</span>
-                    <Input className="pl-6 h-9 text-sm font-mono" type="number" value={values.driveRate} onChange={(e) => handleChange("driveRate", e.target.value)} data-testid="input-drive-rate" />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <Label className="text-xs text-slate-500 font-semibold">Fuel Surcharge (%)</Label>
-                    <div className="relative">
-                      <Input className="h-9 text-sm font-mono" type="number" value={values.fuelSurcharge} onChange={(e) => handleChange("fuelSurcharge", e.target.value)} data-testid="input-fuel-surcharge" />
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400">%</span>
-                    </div>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs text-slate-500 font-semibold">Chains Fee ($)</Label>
-                    <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs">$</span>
-                      <Input className="pl-6 h-9 text-sm font-mono" type="number" value={values.chainsFee} onChange={(e) => handleChange("chainsFee", e.target.value)} data-testid="input-chains-fee" />
-                    </div>
-                  </div>
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-slate-500 font-semibold">Misc Charges ($)</Label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs">$</span>
-                    <Input className="pl-6 h-9 text-sm font-mono" type="number" value={values.miscCharges} onChange={(e) => handleChange("miscCharges", e.target.value)} data-testid="input-misc-charges" />
-                  </div>
-                </div>
-                {parseFloat(values.miscCharges) > 0 && (
-                  <div className="space-y-1.5">
-                    <Label className="text-xs text-slate-500 font-semibold">Misc Description</Label>
-                    <Textarea
-                      placeholder="Describe additional charges..."
-                      className="text-sm resize-none"
-                      rows={2}
-                      value={values.miscChargesDescription}
-                      onChange={(e) => handleChange("miscChargesDescription", e.target.value)}
-                      data-testid="input-misc-description"
-                    />
-                  </div>
-                )}
+              <div className="grid grid-cols-2 gap-2 items-center">
+                <Label className="text-xs text-gray-600">Load Rate ($/HR)</Label>
+                <Input className="h-8 text-right bg-white" type="number" value={values.loadRate} onChange={(e) => handleChange("loadRate", e.target.value)} />
               </div>
-            </Card>
+              <div className="grid grid-cols-2 gap-2 items-center">
+                <Label className="text-xs text-gray-600">Unload Rate ($/HR)</Label>
+                <Input className="h-8 text-right bg-white" type="number" value={values.unloadRate} onChange={(e) => handleChange("unloadRate", e.target.value)} />
+              </div>
+              <div className="grid grid-cols-2 gap-2 items-center">
+                <Label className="text-xs text-gray-500">Fuel Surch. (%)</Label>
+                <Input className="h-8 text-right bg-white" type="number" value={values.fuelSurcharge} onChange={(e) => handleChange("fuelSurcharge", e.target.value)} />
+              </div>
+              <div className="grid grid-cols-2 gap-2 items-center">
+                <Label className="text-xs text-gray-500">Chains Fee ($)</Label>
+                <Input className="h-8 text-right bg-white" type="number" value={values.chainsFee} onChange={(e) => handleChange("chainsFee", e.target.value)} />
+              </div>
+            </div>
+          </Card>
+
+          {/* Target Pay Rates */}
+          <Card className="p-4 shadow-sm border-gray-200 bg-slate-50/50">
+            <h3 className="text-sm font-bold text-gray-800 mb-3">Target Pay Rates</h3>
+            <div className="space-y-2">
+              <div className="grid grid-cols-2 gap-2 items-center">
+                <Label className="text-xs text-gray-500">Driver Target</Label>
+                <Input className="h-8 text-right bg-white" type="number" value={values.driverTarget} onChange={(e) => handleChange("driverTarget", e.target.value)} />
+              </div>
+              <div className="grid grid-cols-2 gap-2 items-center">
+                <Label className="text-xs text-gray-500">O/O Target (Bizi)</Label>
+                <Input className="h-8 text-right bg-white" type="number" value={values.ooBiziTarget} onChange={(e) => handleChange("ooBiziTarget", e.target.value)} />
+              </div>
+              <div className="grid grid-cols-2 gap-2 items-center">
+                <Label className="text-xs text-gray-500">O/O Target (Own)</Label>
+                <Input className="h-8 text-right bg-white" type="number" value={values.ooOwnTarget} onChange={(e) => handleChange("ooOwnTarget", e.target.value)} />
+              </div>
+            </div>
+          </Card>
+
+
+
+          {/* Margin & Warnings */}
+          <Card className="p-4 shadow-sm border-gray-200 bg-white">
+            <h3 className="text-sm font-bold text-gray-800 mb-3">Margin & Warnings</h3>
+            <div className="space-y-3">
+              <div className="text-xs text-gray-500 font-medium">Hourly Thresholds:</div>
+
+              <div className={cn(
+                "flex items-center gap-2 p-2 rounded text-xs font-semibold border transition-all text-white",
+                hourlyMargin > 160
+                  ? "bg-gradient-to-r from-red-500 to-red-600 border-red-600"
+                  : "bg-gray-100 text-gray-400 border-gray-200"
+              )}>
+                {hourlyMargin > 160 ? <AlertTriangle className="w-3 h-3 text-white" /> : <div className="w-3 h-3 rounded-full bg-gray-300" />}
+                Over $160 / HR
+              </div>
+
+              <div className={cn(
+                "flex items-center gap-2 p-2 rounded text-xs font-semibold border transition-all text-white",
+                hourlyMargin > 180
+                  ? "bg-gradient-to-r from-red-700 to-red-900 border-red-800"
+                  : "bg-gray-100 text-gray-400 border-gray-200"
+              )}>
+                {hourlyMargin > 180 ? <AlertTriangle className="w-3 h-3 text-white" /> : <div className="w-3 h-3 rounded-full bg-gray-300" />}
+                Over $180 / HR
+              </div>
+
+              <div className={cn(
+                "flex items-center gap-2 p-2 rounded text-xs font-semibold border transition-all",
+                hourlyMargin < 120
+                  ? "bg-amber-100 text-amber-500 border-amber-200"
+                  : "bg-gray-50 text-gray-300 border-gray-100"
+              )}>
+                {hourlyMargin < 120 ? <AlertTriangle className="w-3 h-3" /> : <div className="w-3 h-3 rounded-full bg-gray-200" />}
+                Below Threshold
+              </div>
+            </div>
+          </Card>
+
+          {/* Accessorials - Spanning 3 cols */}
+          <div className="col-span-1 lg:col-span-3">
+            <AccessorialsTable
+              charges={values.accessorials}
+              onChange={(newCharges) => setValues(prev => ({ ...prev, accessorials: newCharges }))}
+            />
+          </div>
+        </div>
+
+        {/* Calculations */}
+        <div className="bg-gray-100 p-3 rounded-md border border-gray-200 flex flex-wrap gap-6 items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-gray-500 uppercase">Drive Hours ({values.isRoundTrip ? "RT" : "1W"}):</span>
+            <span className="text-sm font-mono font-bold">{driveHours.toFixed(1)}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-gray-500 uppercase">Total Hours:</span>
+            <span className="text-sm font-mono font-bold">{totalHours.toFixed(1)}</span>
+          </div>
+          <div className="flex items-center gap-2 border-l border-gray-300 pl-6">
+            <span className="text-xs font-bold text-gray-500 uppercase">All-in $/Trip:</span>
+            <span className="text-xl font-mono font-bold text-gray-900">${totalTripPrice.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</span>
+          </div>
+        </div>
+
+        {/* Summary Footer */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-2">
+          <div className="bg-white rounded-md border border-gray-200 p-3 space-y-1">
+            <div className="flex justify-between text-xs">
+              <span className="text-gray-500 font-medium">Company Driver:</span>
+              <span className="font-bold font-mono">${driverPay.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+            </div>
+            <div className="flex justify-between text-xs">
+              <span className="text-gray-500 font-medium">O/O (Bizi Truck):</span>
+              <span className="font-bold font-mono">${ooBiziPay.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+            </div>
+            <div className="flex justify-between text-xs">
+              <span className="text-gray-500 font-medium">O/O (Own Truck):</span>
+              <span className="font-bold font-mono">${ooOwnPay.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+            </div>
+            <Separator className="my-2" />
+            <div className="flex justify-between text-xs">
+              <span className="text-gray-500 font-medium">Internal Notes:</span>
+            </div>
+            <Textarea placeholder="Add notes..." className="h-10 text-xs resize-none" />
           </div>
 
-          <Card className="p-5 shadow-sm border-slate-200">
-            <div className="flex items-center gap-2 mb-5 text-slate-800 font-bold text-sm uppercase tracking-tight">
-              <Truck className="w-4 h-4 text-blue-600" />
-              <h3>Target Pay Rates</h3>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="space-y-1.5">
-                <Label className="text-xs text-slate-500 font-semibold">Driver Target ($/HR)</Label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs">$</span>
-                  <Input className="pl-6 h-9 text-sm font-mono" type="number" value={values.driverTarget} onChange={(e) => handleChange("driverTarget", e.target.value)} data-testid="input-driver-target" />
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs text-slate-500 font-semibold">O/O Bizi Target ($/HR)</Label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs">$</span>
-                  <Input className="pl-6 h-9 text-sm font-mono" type="number" value={values.ooBiziTarget} onChange={(e) => handleChange("ooBiziTarget", e.target.value)} data-testid="input-oo-bizi-target" />
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs text-slate-500 font-semibold">O/O Own Target ($/HR)</Label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs">$</span>
-                  <Input className="pl-6 h-9 text-sm font-mono" type="number" value={values.ooOwnTarget} onChange={(e) => handleChange("ooOwnTarget", e.target.value)} data-testid="input-oo-own-target" />
-                </div>
-              </div>
-            </div>
-          </Card>
-
-
-        </div>
-
-        <div className="lg:col-span-4 space-y-6">
-          <Card className="bg-[#1e293b] text-white p-6 shadow-xl border-slate-800 overflow-hidden relative">
-            <div className="absolute top-0 right-0 p-4 opacity-5">
-              <DollarSign className="w-24 h-24" />
-            </div>
-
-            <h3 className="text-slate-400 font-bold text-[10px] uppercase tracking-[0.2em] mb-6">Quote Summary</h3>
-
-            <div className="space-y-6">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <div className="text-[10px] text-slate-500 font-bold uppercase mb-1">Drive Hours {values.isRoundTrip ? "(RT)" : "(1-way)"}</div>
-                  <div className="text-xl font-mono font-bold">{driveHours.toFixed(1)}</div>
-                </div>
-                <div>
-                  <div className="text-[10px] text-slate-500 font-bold uppercase mb-1">Total Hours</div>
-                  <div className="text-xl font-mono font-bold text-blue-400">{totalHours.toFixed(1)}</div>
-                </div>
-              </div>
-
-              <div className="space-y-2.5">
-                <div className="flex justify-between items-center text-xs text-slate-400">
-                  <span>Base Revenue</span>
-                  <span className="font-mono font-bold">${baseRevenue.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between items-center text-xs text-slate-400">
-                  <span>Fuel Surcharge</span>
-                  <span className="font-mono text-amber-500">+${fuelRevenue.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between items-center text-xs text-slate-400">
-                  <span>Chains Fee</span>
-                  <span className="font-mono text-amber-500">+${chainsFee.toFixed(2)}</span>
-                </div>
-                {miscCharges > 0 && (
-                  <div className="flex justify-between items-center text-xs text-slate-400">
-                    <span>Misc Charges</span>
-                    <span className="font-mono text-amber-500">+${miscCharges.toFixed(2)}</span>
-                  </div>
-                )}
-                <Separator className="bg-slate-700/50" />
-                <div className="flex justify-between items-end pt-2">
-                  <div className="text-[10px] text-slate-500 font-bold uppercase">All-in $/Trip</div>
-                  <div className="text-3xl font-mono font-bold text-emerald-400" data-testid="text-total-price">${totalTripPrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
-                </div>
-                <div className="text-[10px] text-right text-slate-500 font-bold uppercase" data-testid="text-rate-per-ton">
-                  ${ratePerTon.toFixed(2)} per MT
-                </div>
-              </div>
-
-              <div className="pt-4 space-y-3">
-                <Button
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold h-10 text-xs uppercase tracking-widest"
-                  onClick={() => handleSave("Draft")}
-                  disabled={createQuote.isPending}
-                  data-testid="button-save-draft"
-                >
-                  <Save className="mr-2 w-4 h-4" />
-                  {createQuote.isPending ? "Saving..." : "Save Draft"}
+          <div className="bg-white rounded-md border border-gray-200 p-3 space-y-3">
+            <h4 className="text-xs font-bold text-gray-700 uppercase">Output</h4>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-gray-500 w-24">Customer Quote:</span>
+              <div className="flex gap-1 flex-1">
+                <Button variant="outline" size="sm" className="h-7 text-xs flex-1">Preview</Button>
+                <Button variant="outline" size="sm" className="h-7 text-xs flex-1" onClick={handleExportPDF}>
+                  <FileText className="w-3 h-3 mr-1" /> PDF
                 </Button>
-                <Button
-                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-10 text-xs uppercase tracking-widest"
-                  onClick={() => handleSave("Pending Review")}
-                  disabled={createQuote.isPending}
-                  data-testid="button-submit-review"
-                >
-                  <CheckCircle className="mr-2 w-4 h-4" />
-                  Submit for Review
-                </Button>
-                <div className="grid grid-cols-2 gap-2">
+                <Button variant="outline" size="sm" className="h-7 text-xs flex-1" onClick={() => {
+                  const subject = encodeURIComponent(`Quote #${lane?.id ?? "New"}`);
+                  const body = encodeURIComponent(`Total: $${totalTripPrice}`);
+                  window.location.href = `mailto:?subject=${subject}&body=${body}`;
+                }}>Email</Button>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-gray-500 w-24">Internal Breakdown:</span>
+              <div className="flex gap-1 flex-1">
+                <div className="flex-1">
                   <Button
-                    variant="outline"
-                    className="bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700 text-[10px] font-bold h-9 uppercase"
-                    data-testid="button-export-pdf"
-                    onClick={() => {
-                      const origin = values.originOverride || lane.origin;
-                      const destination = values.destinationOverride || lane.destination;
-                      const doc = new jsPDF();
-                      doc.text("Quote Summary", 10, 10);
-                      doc.text(`Customer: ${values.customerName || "N/A"}`, 10, 20);
-                      doc.text(`Lane: ${origin} -> ${destination}`, 10, 30);
-                      doc.text(`Total Cost: $${totalTripPrice.toFixed(2)}`, 10, 40);
-                      doc.save("quote.pdf");
-                    }}
+                    className="w-full h-7 text-xs bg-slate-800 text-white hover:bg-slate-700"
+                    onClick={() => handleSave("Pending Review")}
+                    disabled={createQuote.isPending || user?.role === "viewer"}
                   >
-                    <FileText className="mr-2 w-3 h-3" /> PDF
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700 text-[10px] font-bold h-9 uppercase"
-                    data-testid="button-send-email"
-                    onClick={() => {
-                      const origin = values.originOverride || lane.origin;
-                      const destination = values.destinationOverride || lane.destination;
-                      const subject = encodeURIComponent(`Quote for ${values.customerName}`);
-                      const body = encodeURIComponent(
-                        `Quote Summary:\n\nCustomer: ${values.customerName}\nLane: ${origin} to ${destination}\nTotal Cost: $${totalTripPrice.toFixed(2)}\n\nPlease review attached details.`
-                      );
-                      window.location.href = `mailto:?subject=${subject}&body=${body}`;
-                    }}
-                  >
-                    <Send className="mr-2 w-3 h-3" /> Email
+                    Submit Review
                   </Button>
                 </div>
               </div>
             </div>
-          </Card>
-
-          <Card className="p-5 border-slate-200 shadow-sm">
-            <h4 className="text-[10px] font-bold text-slate-500 uppercase mb-4 tracking-wider">Margin Analysis</h4>
-            <div className="space-y-4">
-              <div>
-                <div className="flex justify-between text-xs mb-1.5">
-                  <span className="text-slate-600 font-medium">Hourly Margin</span>
-                  <span className={`font-mono font-bold ${hourlyMargin > 180 ? 'text-red-500' : 'text-amber-600'}`} data-testid="text-hourly-margin">
-                    ${hourlyMargin.toFixed(2)}/HR
-                  </span>
-                </div>
-                <div className="w-full bg-slate-100 rounded-full h-1.5">
-                  <div
-                    className={`h-1.5 rounded-full ${hourlyMargin > 180 ? 'bg-red-500' : 'bg-amber-500'}`}
-                    style={{ width: `${Math.min((hourlyMargin / 300) * 100, 100)}%` }}
-                  ></div>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <div className={`flex items-center gap-2 p-2 rounded text-[10px] font-bold uppercase tracking-tight ${hourlyMargin > 160 ? 'bg-red-50 text-red-700 border border-red-100' : 'bg-slate-50 text-slate-500 border border-slate-100'}`}>
-                  <div className={`w-1.5 h-1.5 rounded-full ${hourlyMargin > 160 ? 'bg-red-500' : 'bg-slate-300'}`} />
-                  Above $160/HR Threshold
-                </div>
-                <div className={`flex items-center gap-2 p-2 rounded text-[10px] font-bold uppercase tracking-tight ${hourlyMargin > 180 ? 'bg-red-50 text-red-700 border border-red-100' : 'bg-slate-50 text-slate-500 border border-slate-100'}`}>
-                  <div className={`w-1.5 h-1.5 rounded-full ${hourlyMargin > 180 ? 'bg-red-500' : 'bg-slate-300'}`} />
-                  Above $180/HR Threshold
-                </div>
-              </div>
-            </div>
-          </Card>
+          </div>
         </div>
+
       </div>
     </div>
   );

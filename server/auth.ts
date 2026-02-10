@@ -72,30 +72,8 @@ export function setupAuth(app: Express) {
     });
 
     // Helper for password handling
-    app.post("/api/register", async (req, res, next) => {
-        try {
-            const existingUsers = await storage.getUsers();
-            const exists = existingUsers.find(u => u.username === req.body.username);
-
-            if (exists) {
-                return res.status(400).json({ message: "Username already exists" });
-            }
-
-            const hashedPassword = await hashPassword(req.body.password);
-            const user = await storage.createUser({
-                ...req.body,
-                password: hashedPassword,
-                role: req.body.role || "viewer"
-            });
-
-            req.login(user, (err) => {
-                if (err) return next(err);
-                res.status(201).json(user);
-            });
-        } catch (err) {
-            next(err);
-        }
-    });
+    // Public registration is disabled. Users are created by Admins via /api/users/create
+    // app.post("/api/register", ...) removed
 
     app.post("/api/login", (req, res, next) => {
         passport.authenticate("local", (err: any, user: SelectUser, info: any) => {

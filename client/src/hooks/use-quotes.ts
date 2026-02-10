@@ -23,7 +23,7 @@ export function useCreateQuote() {
         body: JSON.stringify(data),
         credentials: "include",
       });
-      
+
       if (!res.ok) {
         if (res.status === 400) {
           const error = api.quotes.create.responses[400].parse(await res.json());
@@ -56,6 +56,28 @@ export function useUpdateQuote() {
         throw new Error("Failed to update quote");
       }
       return api.quotes.update.responses[200].parse(await res.json());
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [api.quotes.list.path] });
+    },
+  });
+}
+
+export function useDeleteQuote() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: number) => {
+      const url = buildUrl(api.quotes.delete.path, { id });
+      const res = await fetch(url, {
+        method: api.quotes.delete.method,
+        credentials: "include",
+      });
+
+      if (!res.ok) {
+        if (res.status === 404) throw new Error("Quote not found");
+        throw new Error("Failed to delete quote");
+      }
+      return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [api.quotes.list.path] });

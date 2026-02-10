@@ -15,6 +15,7 @@ import {
   type InsertUser,
   type Product,
   type InsertProduct,
+  type QuoteWithLane,
 } from "@shared/schema";
 import { eq, sql, and, gte, lte } from "drizzle-orm";
 
@@ -29,6 +30,8 @@ export interface IStorage {
   getUsers(): Promise<User[]>;
   getUser(id: number): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
+  updateUser(id: number, user: Partial<InsertUser>): Promise<User>;
+  deleteUser(id: number): Promise<void>;
 
   // Products
   getProducts(): Promise<Product[]>;
@@ -42,9 +45,10 @@ export interface IStorage {
   clearLanes(): Promise<void>;
 
   // Quotes
-  getQuotes(): Promise<Quote[]>;
-  getQuotesByClient(clientId: number): Promise<Quote[]>;
-  getQuotesByStatus(status: string): Promise<Quote[]>;
+  getQuotes(): Promise<QuoteWithLane[]>;
+  getQuote(id: number): Promise<Quote | undefined>;
+  getQuotesByClient(clientId: number): Promise<QuoteWithLane[]>;
+  getQuotesByStatus(status: string): Promise<QuoteWithLane[]>;
   createQuote(quote: InsertQuote): Promise<Quote>;
   updateQuote(id: number, quote: Partial<InsertQuote>): Promise<Quote>;
   deleteQuote(id: number): Promise<void>;
@@ -91,6 +95,19 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
+  async updateUser(id: number, user: Partial<InsertUser>): Promise<User> {
+    const [updated] = await db
+      .update(users)
+      .set(user)
+      .where(eq(users.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteUser(id: number): Promise<void> {
+    await db.delete(users).where(eq(users.id, id));
+  }
+
   // Products
   async getProducts(): Promise<Product[]> {
     return await db.select().from(products).where(eq(products.isActive, true));
@@ -128,27 +145,66 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Quotes
-  async getQuotes(): Promise<Quote[]> {
-    return await db.select().from(quotes).orderBy(sql`${quotes.createdAt} DESC`);
+  async getQuotes(): Promise<QuoteWithLane[]> {
+    const result = await db
+      .select()
+      .from(quotes)
+      .leftJoin(lanes, eq(quotes.laneId, lanes.id))
+      .orderBy(sql`${quotes.createdAt} DESC`);
+
+    return result.map(({ quotes, lanes }) => ({
+      ...quotes,
+      origin: lanes?.origin,
+      destination: lanes?.destination,
+      product: lanes?.product,
+    }));
   }
 
-  async getQuotesByClient(clientId: number): Promise<Quote[]> {
-    return await db.select().from(quotes).where(eq(quotes.clientId, clientId)).orderBy(sql`${quotes.createdAt} DESC`);
+  async getQuote(id: number): Promise<Quote | undefined> {
+    const [quote] = await db.select().from(quotes).where(eq(quotes.id, id));
+    return quote;
   }
 
-  async getQuotesByStatus(status: string): Promise<Quote[]> {
-    return await db.select().from(quotes).where(eq(quotes.status, status));
+  async getQuotesByClient(clientId: number): Promise<QuoteWithLane[]> {
+    const result = await db
+      .select()
+      .from(quotes)
+      .leftJoin(lanes, eq(quotes.laneId, lanes.id))
+      .where(eq(quotes.clientId, clientId))
+      .orderBy(sql`${quotes.createdAt} DESC`);
+
+    return result.map(({ quotes, lanes }) => ({
+      ...quotes,
+      origin: lanes?.origin,
+      destination: lanes?.destination,
+      product: lanes?.product,
+    }));
+  }
+
+  async getQuotesByStatus(status: string): Promise<QuoteWithLane[]> {
+    const result = await db
+      .select()
+      .from(quotes)
+      .leftJoin(lanes, eq(quotes.laneId, lanes.id))
+      .where(eq(quotes.status, status));
+
+    return result.map(({ quotes, lanes }) => ({
+      ...quotes,
+      origin: lanes?.origin,
+      destination: lanes?.destination,
+      product: lanes?.product,
+    }));
   }
 
   async createQuote(quote: InsertQuote): Promise<Quote> {
-    const [created] = await db.insert(quotes).values(quote).returning();
+    const [created] = await db.insert(quotes).values(quote as any).returning();
     return created;
   }
 
   async updateQuote(id: number, quote: Partial<InsertQuote>): Promise<Quote> {
     const [updated] = await db
       .update(quotes)
-      .set({ ...quote, updatedAt: new Date() })
+      .set({ ...(quote as any), updatedAt: new Date() })
       .where(eq(quotes.id, id))
       .returning();
     return updated;

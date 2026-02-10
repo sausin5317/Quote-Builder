@@ -51,29 +51,15 @@ function Router() {
       <Route path="/settings">
         <ProtectedRoute component={Settings} path="/settings" />
       </Route>
+      <Route path="/users">
+        <ProtectedRoute component={UsersPage} path="/users" />
+      </Route>
       <Route component={NotFound} />
     </Switch>
   );
 }
 
 function App() {
-  useEffect(() => {
-    const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
-    if (!apiKey) {
-      console.warn("Google Maps API Key is missing. Add VITE_GOOGLE_MAPS_API_KEY to your .env file.");
-      return;
-    }
-
-    const scriptId = "google-maps-script";
-    if (!document.getElementById(scriptId)) {
-      const script = document.createElement("script");
-      script.id = scriptId;
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places`;
-      script.async = true;
-      document.head.appendChild(script);
-    }
-  }, []);
-
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>

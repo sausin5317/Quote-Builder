@@ -1,9 +1,9 @@
 import { Layout } from "@/components/ui/Layout";
-import { LaneSelector } from "@/components/calculator/LaneSelector";
+import { LaneSearchCombobox } from "@/components/calculator/LaneSearchCombobox";
 import { CalculatorForm } from "@/components/calculator/CalculatorForm";
 import { useState } from "react";
 import { Lane, Client } from "@shared/schema";
-import { Calculator, Building2 } from "lucide-react";
+import { Calculator, Plus, Search, ChevronDown, ChevronUp } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Select,
@@ -12,15 +12,25 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { LocationSearchInput } from "@/components/ui/start-location-search";
+import { useLanes } from "@/hooks/use-lanes";
 
 export default function Home() {
   const [selectedLane, setSelectedLane] = useState<Lane | null>(null);
   const [selectedClientId, setSelectedClientId] = useState<number | null>(null);
+  const [isCustomQuote, setIsCustomQuote] = useState(false); // Track if user wants a blank quote
+
+  // Search state for free text (From/To overrides)
+  const [searchOrigin, setSearchOrigin] = useState("");
+  const [searchDestination, setSearchDestination] = useState("");
 
   const { data: clients } = useQuery<Client[]>({
     queryKey: ['/api/clients'],
   });
+
+  const { data: lanes } = useLanes(selectedClientId);
 
   const handleClientChange = (value: string) => {
     if (value === "all") {
@@ -28,28 +38,33 @@ export default function Home() {
     } else {
       setSelectedClientId(parseInt(value));
     }
-    // Reset lane selection when client changes
+    // Don't reset lane here, user might want to keep same lane for diff customer
+  };
+
+  const handleNewLane = () => {
     setSelectedLane(null);
+    setIsCustomQuote(true);
+    setSearchOrigin("");
+    setSearchDestination("");
   };
 
   return (
     <Layout>
-      <div className="flex flex-col h-[calc(100vh-8rem)] lg:h-[calc(100vh-6rem)] gap-6">
+      <div className="flex flex-col h-[calc(100vh-6rem)] gap-4">
 
-        <div className="flex flex-col lg:flex-row gap-6 h-full">
+        {/* Compact Top Control Bar */}
+        <div className="bg-white p-3 rounded-lg border border-gray-200 shadow-sm flex flex-col xl:flex-row gap-4">
+          {/* Group 1: Setup */}
+          <div className="flex flex-wrap items-center gap-4 flex-1">
 
-          <div className="w-full lg:w-80 lg:shrink-0 flex flex-col gap-4">
-            <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-200">
-              <Label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 block">
-                <Building2 className="w-3 h-3 inline mr-1" />
-                Filter by Client
-              </Label>
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-semibold text-gray-600 whitespace-nowrap">Customer:</span>
               <Select value={selectedClientId?.toString() || "all"} onValueChange={handleClientChange}>
-                <SelectTrigger className="w-full" data-testid="select-filter-client">
-                  <SelectValue placeholder="All Clients" />
+                <SelectTrigger className="w-40 h-9 text-sm bg-slate-50 border-slate-200">
+                  <SelectValue placeholder="All" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Clients</SelectItem>
+                  <SelectItem value="all">All</SelectItem>
                   {clients?.map(client => (
                     <SelectItem key={client.id} value={client.id.toString()}>
                       {client.name}
@@ -57,35 +72,76 @@ export default function Home() {
                   ))}
                 </SelectContent>
               </Select>
-              <div className="mt-1 text-[8px] text-gray-400">
-                {clients ? `${clients.length} clients loaded` : "Loading clients..."}
-              </div>
             </div>
 
-            <div className="flex-1 h-64 lg:h-auto">
-              <LaneSelector
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-semibold text-gray-600 whitespace-nowrap">Master Lane:</span>
+              <LaneSearchCombobox
+                lanes={lanes || []}
                 selectedLaneId={selectedLane?.id || null}
-                onSelectLane={setSelectedLane}
-                clientId={selectedClientId}
+                onSelectLane={(lane) => {
+                  setSelectedLane(lane);
+                  setIsCustomQuote(false); // Reset custom quote if master lane picked
+                  if (lane) {
+                    setSearchOrigin(""); // Clear overrides if master lane selected
+                    setSearchDestination("");
+                  }
+                }}
               />
             </div>
           </div>
 
-          <div className="flex-1 h-full overflow-y-auto pr-2 pb-10">
-            {selectedLane ? (
-              <div className="animate-fade-in">
-                <CalculatorForm lane={selectedLane} />
-              </div>
-            ) : (
-              <div className="h-full flex flex-col items-center justify-center text-gray-400 border-2 border-dashed border-gray-200 rounded-2xl bg-gray-50/50 p-8 text-center">
-                <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center shadow-sm mb-4">
-                  <Calculator className="w-8 h-8 text-gray-300" />
-                </div>
-                <h3 className="text-lg font-semibold text-gray-600 mb-2">No Lane Selected</h3>
-                <p className="max-w-md mx-auto">Select a lane from the sidebar to start calculating a quote. You can search by origin, destination, or product.</p>
-              </div>
-            )}
+          {/* Group 2: Context & Action */}
+          <div className="flex flex-wrap items-center gap-4 justify-end">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-semibold text-gray-600">Status:</span>
+              <Select defaultValue="draft">
+                <SelectTrigger className="w-28 h-9 text-sm bg-slate-50 border-slate-200">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="approved">Approved</SelectItem>
+                  <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="draft">Draft</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-semibold text-gray-600">Effective:</span>
+              <Input type="date" className="w-34 h-9 text-sm bg-slate-50 border-slate-200" defaultValue={new Date().toISOString().split('T')[0]} />
+            </div>
+
+            <Button
+              className="h-9 bg-blue-800 hover:bg-blue-900 text-white gap-2 shadow-sm"
+              onClick={handleNewLane}
+            >
+              <Plus className="w-4 h-4" /> New Lane
+            </Button>
           </div>
+        </div>
+
+        {/* Lane Builder / Calculator Form */}
+        <div className="flex-1 overflow-hidden rounded-lg border border-gray-200 shadow-sm bg-white relative">
+          {selectedLane || isCustomQuote ? (
+            <div className="h-full animate-fade-in overflow-y-auto custom-scrollbar">
+              <CalculatorForm
+                lane={selectedLane} // can be null now
+                selectedClientId={selectedClientId}
+              />
+            </div>
+          ) : (
+            <div className="h-full flex flex-col items-center justify-center text-gray-400 p-8 text-center bg-gray-50/50">
+              <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center shadow-sm mb-6">
+                <Calculator className="w-10 h-10 text-gray-300" />
+              </div>
+              <h3 className="text-xl font-bold text-gray-700 mb-2">Quote Calculator</h3>
+              <p className="max-w-md mx-auto text-gray-500">
+                Select a <strong>Customer</strong> and <strong>Master Lane</strong> above to generate a quote.
+                <br /><span className="text-sm opacity-75">Or click "New Lane" to start from scratch.</span>
+              </p>
+            </div>
+          )}
         </div>
       </div>
     </Layout>

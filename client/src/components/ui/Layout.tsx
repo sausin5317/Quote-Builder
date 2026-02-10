@@ -9,7 +9,8 @@ import {
   X,
   LayoutDashboard,
   Building2,
-  LogOut
+  LogOut,
+  Users
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -22,7 +23,7 @@ interface LayoutProps {
 export function Layout({ children }: LayoutProps) {
   const [location] = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const { logoutMutation } = useAuth();
+  const { logoutMutation, user } = useAuth();
 
   const navItems = [
     { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard" },
@@ -32,6 +33,10 @@ export function Layout({ children }: LayoutProps) {
     { icon: Truck, label: "Lanes", href: "/lanes" },
     { icon: Settings, label: "Settings", href: "/settings" },
   ];
+
+  if (user?.role === "admin") {
+    navItems.push({ icon: Users, label: "Users", href: "/users" });
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
