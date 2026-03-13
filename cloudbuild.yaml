@@ -1,0 +1,13 @@
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'asia-south1-docker.pkg.dev/quote-builder-loadtrax/cloud-run-source-deploy/quote-builder:latest'
+      - '--build-arg'
+      - 'VITE_GOOGLE_MAPS_API_KEY=$_VITE_GOOGLE_MAPS_API_KEY'
+      - '.'
+images:
+  - 'asia-south1-docker.pkg.dev/quote-builder-loadtrax/cloud-run-source-deploy/quote-builder:latest'
+options:
+  logging: CLOUD_LOGGING_ONLY

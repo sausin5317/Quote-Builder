@@ -1,4 +1,5 @@
 import { Layout } from "@/components/ui/Layout";
+import { useLocation } from "wouter";
 import { useQuotes, useUpdateQuote, useDeleteQuote } from "@/hooks/use-quotes";
 import { generateQuotePDF } from "@/lib/pdf-generator";
 import { Card, CardContent } from "@/components/ui/card";
@@ -46,6 +47,7 @@ import {
 // import { stringify } from "csv-stringify/sync";
 
 export default function History() {
+  const [, setLocation] = useLocation();
   const { user: currentUser } = useAuth();
   const { data: quotes, isLoading } = useQuotes();
   const { data: clients } = useQuery<Client[]>({ queryKey: ['/api/clients'] });
@@ -189,9 +191,9 @@ export default function History() {
       q.id,
       q.createdAt ? format(new Date(q.createdAt), 'yyyy-MM-dd') : '',
       q.customerName?.replace(/,/g, ' ') || '', // escape commas
-      q.origin?.replace(/,/g, ' ') || '',
-      q.destination?.replace(/,/g, ' ') || '',
-      q.product || '',
+      (q.origin || q.originOverride || "")?.replace(/,/g, ' ') || '',
+      (q.destination || q.destinationOverride || "")?.replace(/,/g, ' ') || '',
+      q.product || q.productOverride || '',
       q.totalCost || '0',
       q.status || ''
     ]);
@@ -332,9 +334,9 @@ export default function History() {
                           <TableCell className="font-medium text-gray-900">{quote.customerName || "-"}</TableCell>
                           <TableCell className="text-xs text-gray-500">
                             <div className="flex flex-col">
-                              <span>{quote.origin}</span>
+                              <span>{quote.origin || quote.originOverride || ""}</span>
                               <span className="opacity-50">to</span>
-                              <span>{quote.destination}</span>
+                              <span>{quote.destination || quote.destinationOverride || ""}</span>
                             </div>
                           </TableCell>
                           <TableCell>
@@ -351,6 +353,17 @@ export default function History() {
                               >
                                 <Eye className="w-4 h-4" />
                               </Button>
+
+                              {/* Edit Action */}
+                              {(quote.status === "Draft" || quote.status === "Pending Review") && canSubmit && (
+                                <Button
+                                  size="icon" variant="ghost" className="h-8 w-8 text-slate-600 hover:bg-slate-100"
+                                  onClick={() => setLocation(`/?edit=${quote.id}`)}
+                                  title="Edit Quote"
+                                >
+                                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+                                </Button>
+                              )}
 
                               {/* Admin/Manager Actions: Approve/Reject (Available for Draft & Pending) */}
                               {(quote.status === "Pending Review" || quote.status === "Draft") && canApprove ? (

@@ -9,9 +9,10 @@ import { useToast } from "@/hooks/use-toast";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useState } from "react";
-import { Loader2, User, Shield, Building2, Check, X, Package, Plus, Trash2 } from "lucide-react";
+import { Loader2, User, Shield, Building2, Check, X, Package, Plus, Trash2, Truck } from "lucide-react";
 import { USER_ROLES } from "@shared/schema";
 import { useProducts, useCreateProduct, useDeleteProduct } from "@/hooks/use-products";
+import { useVehicles, useCreateVehicle, useDeleteVehicle } from "@/hooks/use-vehicles";
 
 // Role permissions matrix
 const PERMISSIONS = {
@@ -33,10 +34,15 @@ export default function Settings() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [newProductName, setNewProductName] = useState("");
+  const [newVehicleName, setNewVehicleName] = useState("");
 
   const { data: products } = useProducts();
   const createProductMutation = useCreateProduct();
   const deleteProductMutation = useDeleteProduct();
+
+  const { data: vehiclesList } = useVehicles();
+  const createVehicleMutation = useCreateVehicle();
+  const deleteVehicleMutation = useDeleteVehicle();
 
   const changePasswordMutation = useMutation({
     mutationFn: async (data: { oldPassword: string; newPassword: string }) => {
@@ -75,7 +81,7 @@ export default function Settings() {
         <h1 className="text-3xl font-display font-bold text-gray-900">Settings</h1>
 
         <Tabs defaultValue="profile" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4 lg:w-[520px]">
+          <TabsList className="grid w-full grid-cols-5 lg:w-[650px]">
             <TabsTrigger value="profile" className="flex items-center gap-2">
               <User className="h-4 w-4" />
               Profile
@@ -83,6 +89,10 @@ export default function Settings() {
             <TabsTrigger value="products" className="flex items-center gap-2">
               <Package className="h-4 w-4" />
               Products
+            </TabsTrigger>
+            <TabsTrigger value="vehicles" className="flex items-center gap-2">
+              <Truck className="h-4 w-4" />
+              Vehicles
             </TabsTrigger>
             <TabsTrigger value="permissions" className="flex items-center gap-2">
               <Shield className="h-4 w-4" />
@@ -257,6 +267,90 @@ export default function Settings() {
                             }
                           }}
                           disabled={deleteProductMutation.isPending}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Vehicles Tab */}
+          <TabsContent value="vehicles" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Manage Vehicles</CardTitle>
+                <CardDescription>Control the list of vehicle/equipment types available for lanes and quotes</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {canModifyDefaults && (
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Enter vehicle type name"
+                      value={newVehicleName}
+                      onChange={(e) => setNewVehicleName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && newVehicleName.trim()) {
+                          createVehicleMutation.mutate({ name: newVehicleName.trim() }, {
+                            onSuccess: () => {
+                              setNewVehicleName("");
+                              toast({ title: "Vehicle added" });
+                            },
+                            onError: (err: Error) => {
+                              toast({ title: "Failed to add vehicle", description: err.message, variant: "destructive" });
+                            },
+                          });
+                        }
+                      }}
+                    />
+                    <Button
+                      onClick={() => {
+                        if (!newVehicleName.trim()) return;
+                        createVehicleMutation.mutate({ name: newVehicleName.trim() }, {
+                          onSuccess: () => {
+                            setNewVehicleName("");
+                            toast({ title: "Vehicle added" });
+                          },
+                          onError: (err: Error) => {
+                            toast({ title: "Failed to add vehicle", description: err.message, variant: "destructive" });
+                          },
+                        });
+                      }}
+                      disabled={createVehicleMutation.isPending || !newVehicleName.trim()}
+                    >
+                      {createVehicleMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                    </Button>
+                  </div>
+                )}
+
+                <div className="divide-y">
+                  {vehiclesList?.length === 0 && (
+                    <p className="text-gray-400 text-center py-4">No vehicles yet. Add your first vehicle type above.</p>
+                  )}
+                  {vehiclesList?.map(vehicle => (
+                    <div key={vehicle.id} className="flex items-center justify-between py-3">
+                      <div className="flex items-center gap-3">
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700">
+                          {vehicle.name}
+                        </span>
+                      </div>
+                      {isAdmin && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                          onClick={() => {
+                            if (confirm(`Delete vehicle "${vehicle.name}"?`)) {
+                              deleteVehicleMutation.mutate(vehicle.id, {
+                                onSuccess: () => toast({ title: "Vehicle deleted" }),
+                                onError: (err: Error) => toast({ title: "Failed to delete", description: err.message, variant: "destructive" }),
+                              });
+                            }
+                          }}
+                          disabled={deleteVehicleMutation.isPending}
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>

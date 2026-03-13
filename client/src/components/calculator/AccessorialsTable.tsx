@@ -14,7 +14,7 @@ interface AccessorialsTableProps {
 }
 
 const PRESET_CHARGES = [
-    { name: "FSC", defaultCost: 0, notes: "FSC to be added at time of delivery", defaultDriverPay: 0, defaultOOBiziPay: 0 },
+    { name: "FSC", defaultCost: 0, notes: "FSC % of All-In", defaultDriverPay: 0, defaultOOBiziPay: 0, isPercentage: true, defaultPercentage: 0 },
     { name: "Standby", defaultCost: 120, notes: ">3 hours", defaultDriverPay: 30, defaultOOBiziPay: 90 },
     { name: "Non Driving Ferry Time", defaultCost: 90, notes: "Per Hour", defaultDriverPay: 28, defaultOOBiziPay: 70 },
     { name: "Daily Min", defaultCost: 900, notes: "10Hr Max", defaultDriverPay: 300, defaultOOBiziPay: 700 },
@@ -36,6 +36,8 @@ export function AccessorialsTable({ charges, onChange, disabled }: AccessorialsT
             notes: "",
             driverPay: 0,
             ooBiziPay: 0,
+            isPercentage: false,
+            percentage: 0,
         };
         onChange([...charges, newCharge]);
     };
@@ -59,7 +61,9 @@ export function AccessorialsTable({ charges, onChange, disabled }: AccessorialsT
                             cost: preset.defaultCost,
                             notes: preset.notes,
                             driverPay: preset.defaultDriverPay,
-                            ooBiziPay: preset.defaultOOBiziPay
+                            ooBiziPay: preset.defaultOOBiziPay,
+                            isPercentage: (preset as any).isPercentage || false,
+                            percentage: (preset as any).defaultPercentage || 0
                         };
                     }
                 }
@@ -88,6 +92,7 @@ export function AccessorialsTable({ charges, onChange, disabled }: AccessorialsT
                     <TableHeader className="bg-gray-50/50">
                         <TableRow>
                             <TableHead className="w-[180px]">Charge Name</TableHead>
+                            <TableHead className="w-[100px]">Type / Val</TableHead>
                             <TableHead className="w-[100px]">Cost ($)</TableHead>
                             <TableHead>Notes</TableHead>
                             <TableHead className="w-[100px]">Bizi Pay ($)</TableHead>
@@ -141,12 +146,31 @@ export function AccessorialsTable({ charges, onChange, disabled }: AccessorialsT
                                         )}
                                     </TableCell>
                                     <TableCell>
+                                        <div className="flex gap-1 items-center">
+                                            {charge.isPercentage ? (
+                                                <div className="relative w-full">
+                                                    <Input
+                                                        type="number"
+                                                        className="h-8 text-xs text-right pr-6"
+                                                        value={charge.percentage}
+                                                        onChange={(e) => updateCharge(charge.id, "percentage", parseFloat(e.target.value))}
+                                                        disabled={disabled}
+                                                    />
+                                                    <span className="absolute right-2 top-2 text-xs text-gray-400">%</span>
+                                                </div>
+                                            ) : (
+                                                <span className="text-xs text-gray-400">Fixed</span>
+                                            )}
+                                        </div>
+                                    </TableCell>
+                                    <TableCell>
                                         <Input
                                             type="number"
                                             className="h-8 text-xs text-right"
                                             value={charge.cost}
                                             onChange={(e) => updateCharge(charge.id, "cost", parseFloat(e.target.value))}
-                                            disabled={disabled}
+                                            readOnly={!!charge.isPercentage}
+                                            disabled={disabled || !!charge.isPercentage}
                                         />
                                     </TableCell>
                                     <TableCell>
@@ -194,6 +218,7 @@ export function AccessorialsTable({ charges, onChange, disabled }: AccessorialsT
                         <tfoot className="bg-gray-50 border-t border-gray-200">
                             <TableRow>
                                 <TableCell className="font-bold text-xs">Totals</TableCell>
+                                <TableCell></TableCell>
                                 <TableCell className="font-bold text-xs text-right">${totalCost.toFixed(2)}</TableCell>
                                 <TableCell></TableCell>
                                 <TableCell className="font-bold text-xs text-right">${totalDriverPay.toFixed(2)}</TableCell>

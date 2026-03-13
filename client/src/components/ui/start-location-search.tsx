@@ -23,9 +23,13 @@ export function LocationSearchInput({
     const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const lastPlaceIdRef = useRef("");
     const onChangeRef = useRef(onChange);
+    const setEditRef = useRef(setIsEditing);
 
     // Keep onChange ref fresh
-    useEffect(() => { onChangeRef.current = onChange; }, [onChange]);
+    useEffect(() => { 
+        onChangeRef.current = onChange; 
+        setEditRef.current = setIsEditing;
+    }, [onChange, setIsEditing]);
 
     // Cleanup polling on unmount
     useEffect(() => {
@@ -84,10 +88,32 @@ export function LocationSearchInput({
                     const picker = new Ctor();
                     picker.placeholder = placeholder;
                     picker.classList.add("w-full");
-                    picker.addEventListener("gmp-places-select", async (evt: any) => {
-                        console.log("LocationSearchInput: gmp-places-select fired");
+                    picker.addEventListener("gmp-placeselect", async (evt: any) => {
+                        console.log("LocationSearchInput: gmp-placeselect fired");
                         await handlePlaceSelect(evt.place);
                     });
+                    
+                    // Capture raw typed input on blur if no place is officially selected
+                    picker.addEventListener("focusout", () => {
+                        setTimeout(() => {
+                           // Try to access the raw input text from the shadow DOM input or the inputValue property.
+                           const rawVal = picker.inputValue;
+                           if (rawVal) {
+                               onChangeRef.current(rawVal);
+                           }
+                        }, 200);
+                    });
+                    
+                    // Optional: keep it synced on enter key
+                    picker.addEventListener("keydown", (evt: KeyboardEvent) => {
+                        if (evt.key === "Enter") {
+                           const rawVal = picker.inputValue;
+                           if (rawVal) {
+                               onChangeRef.current(rawVal);
+                           }
+                        }
+                    });
+
                     pickerRef.current = picker;
                 }
 

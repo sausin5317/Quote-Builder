@@ -1,5 +1,5 @@
 import { jsPDF } from "jspdf";
-import { QuoteWithLane, AccessorialCharge } from "@shared/schema";
+import { QuoteWithLane, AccessorialCharge, EquipmentItem } from "@shared/schema";
 
 interface GeneratePDFParams {
     quote: QuoteWithLane | any; // Accept QuoteWithLane or FormValues-like object
@@ -18,38 +18,29 @@ export const generateQuotePDF = ({ quote, clientName, isDraft = false }: Generat
         return quote[key] !== undefined && quote[key] !== null ? quote[key] : defaultVal;
     };
 
-    const origin = getValue("origin") || getValue("originOverride") || "";
-    const destination = getValue("destination") || getValue("destinationOverride") || "";
-    const product = getValue("product") || getValue("productOverride") || "";
-    const distance = getValue("distance", 0);
-    const isRoundTrip = getValue("isRoundTrip", false);
+    const origin = getValue("originOverride", getValue("origin", ""));
+    const destination = getValue("destinationOverride", getValue("destination", ""));
+    const product = getValue("productOverride", getValue("product", ""));
+    const distance = quote.distance || 0;
+    const isRoundTrip = quote.isRoundTrip ?? false;
 
-    const baseRevenue = (() => {
-        // Re-calculate or use stored total? 
-        // If passing a Quote object, it might only have totalCost.
-        // Ideally we want the breakdown.
-        // If we are in History, we might not have all breakdown fields if they weren't saved?
-        // Wait, the DB schema for Quote doesn't have breakdown fields like 'driveRevenue'.
-        // It has rate components like 'driveRate', 'loadRate'...
-        // We can re-calculate if needed, or just show summary if breakdown is missing.
-        // But for CalculatorForm, we have the calculated values.
-        // Let's rely on the passed object having the necessary data or we calculate it.
+    const dist = parseFloat(distance);
+    const spd = parseFloat(getValue("speed", 80));
+    const distMult = isRoundTrip ? 2 : 1;
+    const driveHrs = (dist * distMult) / spd;
 
-        const dist = parseFloat(distance);
-        const spd = parseFloat(getValue("speed", 80));
-        const distMult = isRoundTrip ? 2 : 1;
-        const driveHrs = (dist * distMult) / spd;
+    const loadTime = parseFloat(getValue("loadTime", 0));
+    const unloadTime = parseFloat(getValue("unloadTime", 0));
+    const standbyTime = parseFloat(getValue("standbyTime", 0));
 
-        const loadTime = parseFloat(getValue("loadTime", 0));
-        const unloadTime = parseFloat(getValue("unloadTime", 0));
-        const standbyTime = parseFloat(getValue("standbyTime", 0));
+    const totalHoursCalc = driveHrs + loadTime + unloadTime + standbyTime;
+    const totalHours = parseFloat(getValue("totalHours", totalHoursCalc));
 
-        const driveRate = parseFloat(getValue("driveRate", 0));
-        const loadRate = parseFloat(getValue("loadRate", 0));
-        const unloadRate = parseFloat(getValue("unloadRate", 0));
+    const driveRate = parseFloat(getValue("driveRate", 0));
+    const loadRate = parseFloat(getValue("loadRate", 0));
+    const unloadRate = parseFloat(getValue("unloadRate", 0));
 
-        return (driveHrs * driveRate) + (loadTime * loadRate) + (unloadTime * unloadRate) + (standbyTime * loadRate);
-    })();
+    const baseRevenue = (driveHrs * driveRate) + (loadTime * loadRate) + (unloadTime * unloadRate) + (standbyTime * loadRate);
 
     const fuelSurchargePercent = parseFloat(getValue("fuelSurcharge", 0));
     const fuelRevenue = baseRevenue * (fuelSurchargePercent / 100);
@@ -60,7 +51,9 @@ export const generateQuotePDF = ({ quote, clientName, isDraft = false }: Generat
     const accessorials: AccessorialCharge[] = getValue("accessorials", []);
 
     const accessorialsCost = accessorials.reduce((sum, item) => sum + (Number(item.cost) || 0), 0);
-    const totalTripPrice = baseRevenue + fuelRevenue + chainsFee + miscCharges + accessorialsCost;
+    // User requested Accessorials do NOT increase the All-In / Total Trip Cost.
+    // So Total Trip Price = Base + Fuel + Misc + Chains
+    const totalTripPrice = baseRevenue + fuelRevenue + chainsFee + miscCharges;
 
     const mtPerLoad = parseFloat(getValue("mtPerLoad", 1));
     const ratePerTon = mtPerLoad > 0 ? totalTripPrice / mtPerLoad : 0;
@@ -99,6 +92,12 @@ export const generateQuotePDF = ({ quote, clientName, isDraft = false }: Generat
     doc.text(`Client: ${custName}`, 15, 65);
     doc.text(`Product: ${product}`, 15, 72);
 
+    const equipment: EquipmentItem[] = getValue("equipment", []);
+    if (equipment.length > 0) {
+        const equipmentList = equipment.map(e => e.type).join(", ");
+        doc.text(`Equipment: ${equipmentList}`, 15, 79);
+    }
+
     // Lane Info
     doc.setFont("helvetica", "bold");
     doc.setFontSize(12);
@@ -121,16 +120,24 @@ export const generateQuotePDF = ({ quote, clientName, isDraft = false }: Generat
     doc.setFont("helvetica", "normal");
     doc.setFontSize(10);
 
-    const addLine = (label: string, value: string) => {
+    const addLine = (label: string, value: string, isBold = false) => {
+        if (isBold) doc.setFont("helvetica", "bold");
+        else doc.setFont("helvetica", "normal");
+
         doc.text(label, 15, yPos);
         doc.text(value, 195, yPos, { align: "right" });
         yPos += 7;
+
+        // Reset font
+        doc.setFont("helvetica", "normal");
     };
 
     addLine("Base Revenue", `$${baseRevenue.toFixed(2)}`);
     addLine(`Fuel Surcharge (${fuelSurchargePercent}%)`, `$${fuelRevenue.toFixed(2)}`);
-    if (chainsFee > 0) addLine("Chains Fee", `$${chainsFee.toFixed(2)}`);
-    if (miscCharges > 0) addLine(`Misc Charges (${miscDesc})`, `$${miscCharges.toFixed(2)}`);
+    if (chainsFee > 0) addLine("Misc Fee", `$${chainsFee.toFixed(2)}`);
+    if (miscCharges > 0) addLine(`Other Charges (${miscDesc})`, `$${miscCharges.toFixed(2)}`);
+
+
 
     // Accessorials
     if (accessorials.length > 0) {
@@ -159,6 +166,13 @@ export const generateQuotePDF = ({ quote, clientName, isDraft = false }: Generat
             doc.text(cost, 193, yPos, { align: "right" });
             yPos += 6;
         });
+
+        // Accessorial Total
+        yPos += 2;
+        doc.setFont("helvetica", "bold");
+        doc.text("Total Accessorials", 100, yPos);
+        doc.text(`$${accessorialsCost.toFixed(2)}`, 193, yPos, { align: "right" });
+        yPos += 7;
     }
 
     const notes = getValue("notes");
@@ -191,6 +205,42 @@ export const generateQuotePDF = ({ quote, clientName, isDraft = false }: Generat
     doc.setFontSize(10);
     doc.setTextColor(100, 100, 100);
     doc.text(`Rate per MT: $${ratePerTon.toFixed(2)}`, 195, yPos, { align: "right" });
+
+    // Driver Pay Summary Calculations
+    const driverTarget = parseFloat(getValue("driverTarget", 0));
+    const ooBiziTarget = parseFloat(getValue("ooBiziTarget", 0));
+    const ooOwnTarget = parseFloat(getValue("ooOwnTarget", 0));
+
+    const accessorialsDriverPay = accessorials.reduce((sum, item) => sum + (Number(item.driverPay) || 0), 0);
+    const accessorialsOOBiziPay = accessorials.reduce((sum, item) => sum + (Number(item.ooBiziPay) || 0), 0);
+
+    const driverTotalPay = (totalHours * driverTarget) + accessorialsDriverPay;
+    const ooBiziTotalPay = (totalHours * ooBiziTarget) + accessorialsOOBiziPay;
+    const ooOwnPay = (totalHours * ooOwnTarget);
+
+    if (driverTotalPay > 0 || ooBiziTotalPay > 0 || ooOwnPay > 0) {
+        yPos += 15;
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(12);
+        doc.setTextColor(0, 0, 0);
+        doc.text("Estimated Pay Summary", 15, yPos);
+        doc.line(15, yPos + 2, 195, yPos + 2);
+        
+        yPos += 10;
+        doc.setFontSize(10);
+        doc.setFont("helvetica", "normal");
+        
+        doc.text("Company Driver:", 15, yPos);
+        doc.text(`$${driverTotalPay.toLocaleString(undefined, { maximumFractionDigits: 0 })}`, 195, yPos, { align: "right" });
+        yPos += 7;
+        
+        doc.text("O/O (Bizi Truck):", 15, yPos);
+        doc.text(`$${ooBiziTotalPay.toLocaleString(undefined, { maximumFractionDigits: 0 })}`, 195, yPos, { align: "right" });
+        yPos += 7;
+        
+        doc.text("O/O (Own Truck):", 15, yPos);
+        doc.text(`$${ooOwnPay.toLocaleString(undefined, { maximumFractionDigits: 0 })}`, 195, yPos, { align: "right" });
+    }
 
     // Footer
     doc.setFontSize(8);

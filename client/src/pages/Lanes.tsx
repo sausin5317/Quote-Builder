@@ -18,6 +18,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { useProducts } from "@/hooks/use-products";
+import { useVehicles } from "@/hooks/use-vehicles";
 import { api } from "@shared/routes";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -28,6 +29,7 @@ const DEFAULT_LANE = {
   origin: "",
   destination: "",
   product: "",
+  vehicle: "",
   distance: "0",
   ratePerHour: "0",
   speed: "70",
@@ -47,6 +49,7 @@ export default function Lanes() {
   const { toast } = useToast();
   const { user } = useAuth();
   const { data: products } = useProducts();
+  const { data: vehiclesList } = useVehicles();
   const importMutation = useImportLanes();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -180,6 +183,7 @@ export default function Lanes() {
       origin: lane.origin,
       destination: lane.destination,
       product: lane.product,
+      vehicle: (lane as any).vehicle || "",
       distance: lane.distance,
       ratePerHour: lane.ratePerHour,
       speed: lane.speed,
@@ -242,18 +246,33 @@ export default function Lanes() {
           />
         </div>
       </div>
-      <div className="space-y-2">
-        <Label>Product *</Label>
-        <Select value={formData.product} onValueChange={v => updateField("product", v)}>
-          <SelectTrigger>
-            <SelectValue placeholder="Select a product" />
-          </SelectTrigger>
-          <SelectContent>
-            {products?.map(p => (
-              <SelectItem key={p.id} value={p.name}>{p.name}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label>Product *</Label>
+          <Select value={formData.product} onValueChange={v => updateField("product", v)}>
+            <SelectTrigger>
+              <SelectValue placeholder="Select a product" />
+            </SelectTrigger>
+            <SelectContent>
+              {products?.map(p => (
+                <SelectItem key={p.id} value={p.name}>{p.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-2">
+          <Label>Vehicle</Label>
+          <Select value={formData.vehicle} onValueChange={v => updateField("vehicle", v)}>
+            <SelectTrigger>
+              <SelectValue placeholder="Select a vehicle" />
+            </SelectTrigger>
+            <SelectContent>
+              {vehiclesList?.map(v => (
+                <SelectItem key={v.id} value={v.name}>{v.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
       <div className="grid grid-cols-3 gap-4">
         <div className="space-y-2">
@@ -489,7 +508,7 @@ export default function Lanes() {
             <DialogDescription>Enter details to create a new lane.</DialogDescription>
           </DialogHeader>
           {laneFormFields}
-          <Button className="w-full" onClick={handleSave} disabled={createMutation.isPending || !formData.origin || !formData.destination || !formData.product}>
+          <Button className="w-full" onClick={handleSave} disabled={createMutation.isPending || !formData.origin || !formData.destination}>
             {createMutation.isPending ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Creating...</>) : "Create Lane"}
           </Button>
         </DialogContent>
@@ -503,7 +522,7 @@ export default function Lanes() {
             <DialogDescription>Modify the details of the selected lane.</DialogDescription>
           </DialogHeader>
           {laneFormFields}
-          <Button className="w-full" onClick={handleSave} disabled={updateMutation.isPending || !formData.origin || !formData.destination || !formData.product}>
+          <Button className="w-full" onClick={handleSave} disabled={updateMutation.isPending || !formData.origin || !formData.destination}>
             {updateMutation.isPending ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving...</>) : "Save Changes"}
           </Button>
         </DialogContent>

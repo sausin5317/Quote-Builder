@@ -33,6 +33,14 @@ export const products = pgTable("products", {
   isActive: boolean("is_active").default(true),
 });
 
+// Vehicles table for equipment type selection
+export const vehicles = pgTable("vehicles", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  category: text("category"),
+  isActive: boolean("is_active").default(true),
+});
+
 // Master list of lanes imported from CSV
 export const lanes = pgTable("lanes", {
   id: serial("id").primaryKey(),
@@ -40,6 +48,7 @@ export const lanes = pgTable("lanes", {
   origin: text("origin").notNull(),
   destination: text("destination").notNull(),
   product: text("product").notNull(),
+  vehicle: text("vehicle"),
   distance: numeric("distance").notNull(),
   ratePerHour: numeric("rate_per_hour").notNull(),
   speed: numeric("speed").notNull(),
@@ -61,6 +70,14 @@ export type AccessorialCharge = {
   notes: string;
   driverPay: number;
   ooBiziPay: number;
+  isPercentage?: boolean;
+  percentage?: number;
+};
+
+export type EquipmentItem = {
+  id: string;
+  type: string;
+  description: string;
 };
 
 
@@ -76,9 +93,10 @@ export const quotes = pgTable("quotes", {
   approvedBy: integer("approved_by").references(() => users.id),
   approvedAt: timestamp("approved_at"),
 
-  // Location overrides
+  // Location and product overrides
   originOverride: text("origin_override"),
   destinationOverride: text("destination_override"),
+  productOverride: text("product_override"),
 
   // Core trip parameters
   distance: numeric("distance"),
@@ -109,6 +127,7 @@ export const quotes = pgTable("quotes", {
   ratePerTon: numeric("rate_per_ton"),
 
   accessorials: json("accessorials").$type<AccessorialCharge[]>().default([]),
+  equipment: json("equipment").$type<EquipmentItem[]>().default([]),
   notes: text("notes"),
 
   createdAt: timestamp("created_at").defaultNow(),
@@ -119,6 +138,7 @@ export const quotes = pgTable("quotes", {
 export const insertClientSchema = createInsertSchema(clients).omit({ id: true, createdAt: true });
 export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true });
 export const insertProductSchema = createInsertSchema(products).omit({ id: true });
+export const insertVehicleSchema = createInsertSchema(vehicles).omit({ id: true });
 export const insertLaneSchema = createInsertSchema(lanes).omit({ id: true });
 export const insertQuoteSchema = createInsertSchema(quotes).omit({ id: true, createdAt: true, updatedAt: true });
 
@@ -129,6 +149,8 @@ export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type Product = typeof products.$inferSelect;
 export type InsertProduct = z.infer<typeof insertProductSchema>;
+export type Vehicle = typeof vehicles.$inferSelect;
+export type InsertVehicle = z.infer<typeof insertVehicleSchema>;
 export type Lane = typeof lanes.$inferSelect;
 export type InsertLane = z.infer<typeof insertLaneSchema>;
 export type Quote = typeof quotes.$inferSelect;
@@ -139,6 +161,7 @@ export type QuoteWithLane = Quote & {
   origin?: string | null;
   destination?: string | null;
   product?: string | null;
+  productOverride?: string | null;
 };
 
 // Quote Status Types

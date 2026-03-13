@@ -5,6 +5,7 @@ import {
   clients,
   users,
   products,
+  vehicles,
   type Lane,
   type InsertLane,
   type Quote,
@@ -15,6 +16,8 @@ import {
   type InsertUser,
   type Product,
   type InsertProduct,
+  type Vehicle,
+  type InsertVehicle,
   type QuoteWithLane,
 } from "@shared/schema";
 import { eq, sql, and, gte, lte, ilike, or, count, asc, desc } from "drizzle-orm";
@@ -37,6 +40,11 @@ export interface IStorage {
   getProducts(): Promise<Product[]>;
   createProduct(product: InsertProduct): Promise<Product>;
   deleteProduct(id: number): Promise<void>;
+
+  // Vehicles
+  getVehicles(): Promise<Vehicle[]>;
+  createVehicle(vehicle: InsertVehicle): Promise<Vehicle>;
+  deleteVehicle(id: number): Promise<void>;
 
   // Lanes
   getLanes(): Promise<Lane[]>;
@@ -126,6 +134,20 @@ export class DatabaseStorage implements IStorage {
 
   async deleteProduct(id: number): Promise<void> {
     await db.delete(products).where(eq(products.id, id));
+  }
+
+  // Vehicles
+  async getVehicles(): Promise<Vehicle[]> {
+    return await db.select().from(vehicles).where(eq(vehicles.isActive, true));
+  }
+
+  async createVehicle(vehicle: InsertVehicle): Promise<Vehicle> {
+    const [created] = await db.insert(vehicles).values(vehicle).returning();
+    return created;
+  }
+
+  async deleteVehicle(id: number): Promise<void> {
+    await db.delete(vehicles).where(eq(vehicles.id, id));
   }
 
   // Lanes

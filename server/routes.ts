@@ -197,6 +197,37 @@ export async function registerRoutes(
     }
   });
 
+  // === VEHICLES API ===
+  app.get("/api/vehicles", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    const vehicles = await storage.getVehicles();
+    res.json(vehicles);
+  });
+
+  app.post("/api/vehicles", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    try {
+      const vehicle = await storage.createVehicle(req.body);
+      res.status(201).json(vehicle);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
+      throw err;
+    }
+  });
+
+  app.delete("/api/vehicles/:id", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    if (req.user.role !== "admin") return res.status(403).json({ message: "Only admins can delete vehicles" });
+    try {
+      await storage.deleteVehicle(Number(req.params.id));
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to delete vehicle" });
+    }
+  });
+
   // === LANES API ===
 
   // Paginated search endpoint
@@ -295,7 +326,8 @@ export async function registerRoutes(
           });
         });
       } else if (extension === ".xlsx" || extension === ".xls") {
-        const workbook = XLSX.readFile(file.path);
+        const fileBuffer = fs.readFileSync(file.path);
+        const workbook = XLSX.read(fileBuffer, { type: "buffer" });
         const sheetName = workbook.SheetNames[0];
         records = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
       } else {

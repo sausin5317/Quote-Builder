@@ -1,7 +1,7 @@
 import { Layout } from "@/components/ui/Layout";
 import { LaneSearchCombobox } from "@/components/calculator/LaneSearchCombobox";
 import { CalculatorForm } from "@/components/calculator/CalculatorForm";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Lane, Client } from "@shared/schema";
 import { Calculator, Plus, Search, ChevronDown, ChevronUp } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { LocationSearchInput } from "@/components/ui/start-location-search";
 import { useLanes } from "@/hooks/use-lanes";
+import { useQuotes } from "@/hooks/use-quotes";
 
 export default function Home() {
   const [selectedLane, setSelectedLane] = useState<Lane | null>(null);
@@ -31,6 +32,24 @@ export default function Home() {
   });
 
   const { data: lanes } = useLanes(selectedClientId);
+
+  const editIdStr = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get("edit") : null;
+  const editId = editIdStr ? parseInt(editIdStr) : null;
+  const { data: quotes } = useQuotes();
+  const editQuote = quotes?.find(q => q.id === editId) || null;
+
+  // Sync client/lane when editQuote loads
+  useEffect(() => {
+    if (editQuote) {
+      if (editQuote.clientId && selectedClientId !== editQuote.clientId) {
+        setSelectedClientId(editQuote.clientId);
+      }
+      if (editQuote.laneId && (!selectedLane || selectedLane.id !== editQuote.laneId)) {
+        const lane = lanes?.find(l => l.id === editQuote.laneId) || null;
+        setSelectedLane(lane);
+      }
+    }
+  }, [editQuote, lanes]);
 
   const handleClientChange = (value: string) => {
     if (value === "all") {
@@ -123,11 +142,18 @@ export default function Home() {
 
         {/* Lane Builder / Calculator Form */}
         <div className="flex-1 overflow-hidden rounded-lg border border-gray-200 shadow-sm bg-white relative">
-          {selectedLane || isCustomQuote ? (
+          {selectedLane || isCustomQuote || editQuote ? (
             <div className="h-full animate-fade-in overflow-y-auto custom-scrollbar">
+              {editQuote && (
+                <div className="bg-blue-50 border-b border-blue-100 px-4 py-2 flex items-center gap-2">
+                  <span className="text-sm font-semibold text-blue-800">Editing Quote #{editQuote.id}</span>
+                  <span className="text-xs text-blue-600 bg-blue-100 px-2 py-0.5 rounded-full">{editQuote.status}</span>
+                </div>
+              )}
               <CalculatorForm
                 lane={selectedLane} // can be null now
                 selectedClientId={selectedClientId}
+                editQuote={editQuote}
               />
             </div>
           ) : (

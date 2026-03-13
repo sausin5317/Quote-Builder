@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { generateQuotePDF } from "@/lib/pdf-generator";
 import { calculateDistance } from "@/lib/map-service";
-import { Lane, InsertQuote, Client } from "@shared/schema";
+import { Lane, InsertQuote, Client, EquipmentItem, Product } from "@shared/schema";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
@@ -9,11 +9,14 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { Clock, DollarSign, Fuel, Truck, Save, FileText, Send, Plus, CheckCircle, ArrowRight, AlertTriangle, Check, ShieldCheck } from "lucide-react";
-import { useCreateQuote } from "@/hooks/use-quotes";
+import { Clock, DollarSign, Fuel, Truck, Save, FileText, Send, Plus, CheckCircle, ArrowRight, AlertTriangle, Check, ShieldCheck, X, Wrench } from "lucide-react";
+import { nanoid } from "nanoid";
+import { useCreateQuote, useUpdateQuote } from "@/hooks/use-quotes";
+import type { QuoteWithLane } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { LocationSearchInput } from "@/components/ui/start-location-search";
 import { useAuth } from "@/hooks/use-auth";
+import { useVehicles } from "@/hooks/use-vehicles";
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import {
@@ -27,21 +30,30 @@ import { AccessorialsTable } from "./AccessorialsTable";
 import { AccessorialCharge } from "@shared/schema";
 
 
+
 interface CalculatorFormProps {
   lane: Lane | null; // Allow null for new lanes
   selectedClientId?: number | null; // Add prop
+  editQuote?: QuoteWithLane | null; // Edit quote
 }
 
-const PRODUCT_TYPES = ["Sulfur", "Bentonite", "PAC", "ACH", "Caustic", "Acid", "Other"];
+// Removed static PRODUCT_TYPES
 
-export function CalculatorForm({ lane, selectedClientId }: CalculatorFormProps) {
+export function CalculatorForm({ lane, selectedClientId, editQuote }: CalculatorFormProps) {
   const { toast } = useToast();
   const { user } = useAuth();
   const createQuote = useCreateQuote();
+  const updateQuote = useUpdateQuote();
 
   const { data: clients } = useQuery<Client[]>({
     queryKey: ['/api/clients'],
   });
+
+  const { data: products } = useQuery<Product[]>({
+    queryKey: ['/api/products'],
+  });
+
+  const { data: vehiclesList } = useVehicles();
 
   // Default blank values
   const defaultValues = {
@@ -71,14 +83,43 @@ export function CalculatorForm({ lane, selectedClientId }: CalculatorFormProps) 
     destinationOverride: "",
     productOverride: "Sulfur",
     accessorials: [] as AccessorialCharge[],
+    equipment: [{ id: nanoid(), type: "Trailer", description: "" }] as EquipmentItem[],
     notes: "",
   };
 
   const [values, setValues] = useState(defaultValues);
 
-  // Sync state when dependencies change (lane or selectedClientId)
+  // Sync state when dependencies change (editQuote, lane, or selectedClientId)
   useEffect(() => {
-    if (lane) {
+    if (editQuote) {
+      setValues({
+        distance: editQuote.distance?.toString() || "0",
+        speed: editQuote.speed?.toString() || "80",
+        loadTime: editQuote.loadTime?.toString() || "1",
+        unloadTime: editQuote.unloadTime?.toString() || "1",
+        standbyTime: editQuote.standbyTime?.toString() || "0",
+        mtPerLoad: editQuote.mtPerLoad?.toString() || "0",
+        isRoundTrip: editQuote.isRoundTrip ?? true,
+        driveRate: editQuote.driveRate?.toString() || "0",
+        loadRate: editQuote.loadRate?.toString() || "0",
+        unloadRate: editQuote.unloadRate?.toString() || "0",
+        fuelSurcharge: editQuote.fuelSurcharge?.toString() || "0",
+        chainsFee: editQuote.chainsFee?.toString() || "0",
+        miscCharges: editQuote.miscCharges?.toString() || "0",
+        miscChargesDescription: editQuote.miscChargesDescription || "",
+        driverTarget: editQuote.driverTarget?.toString() || "0",
+        ooBiziTarget: editQuote.ooBiziTarget?.toString() || "0",
+        ooOwnTarget: editQuote.ooOwnTarget?.toString() || "0",
+        customerName: editQuote.customerName || "",
+        clientId: editQuote.clientId?.toString() || selectedClientId?.toString() || "",
+        originOverride: editQuote.originOverride || editQuote.origin || "",
+        destinationOverride: editQuote.destinationOverride || editQuote.destination || "",
+        productOverride: editQuote.product || "Sulfur",
+        accessorials: editQuote.accessorials || [],
+        equipment: editQuote.equipment?.length ? editQuote.equipment : [{ id: nanoid(), type: "Trailer", description: "" }],
+        notes: editQuote.notes || "",
+      });
+    } else if (lane) {
       setValues({
         distance: lane.distance,
         speed: lane.speed,
@@ -103,6 +144,7 @@ export function CalculatorForm({ lane, selectedClientId }: CalculatorFormProps) 
         destinationOverride: lane.destination,
         productOverride: lane.product,
         accessorials: [],
+        equipment: [{ id: nanoid(), type: "Trailer", description: "" }],
         notes: "",
       });
     } else {
@@ -113,13 +155,13 @@ export function CalculatorForm({ lane, selectedClientId }: CalculatorFormProps) 
         clientId: selectedClientId?.toString() || prev.clientId
       }));
     }
-  }, [lane, selectedClientId]);
+  }, [lane, selectedClientId, editQuote]);
 
   // Auto-calculate distance
   useEffect(() => {
     const calcDist = async () => {
       console.log("Calculator: Checking auto-calc conditions...", { origin: values.originOverride, dest: values.destinationOverride, hasLane: !!lane });
-      if (values.originOverride && values.destinationOverride && !lane) {
+      if (values.originOverride && values.destinationOverride && !lane && !editQuote) {
         console.log("Calculator: Triggering calculation...");
         const dist = await calculateDistance(values.originOverride, values.destinationOverride);
         console.log("Calculator: Received distance:", dist);
@@ -152,7 +194,7 @@ export function CalculatorForm({ lane, selectedClientId }: CalculatorFormProps) 
   const loadRate = parseFloat(values.loadRate || "0");
   const unloadRate = parseFloat(values.unloadRate || "0");
   const fuelSurchargePercent = parseFloat(values.fuelSurcharge || "0");
-  const chainsFee = parseFloat(values.chainsFee || "0");
+  const chainsFee = parseFloat(values.chainsFee || "0"); // Now mapped to Misc Fee in UI
   const miscCharges = parseFloat(values.miscCharges || "0");
   const mtPerLoad = parseFloat(values.mtPerLoad || "1");
 
@@ -169,8 +211,32 @@ export function CalculatorForm({ lane, selectedClientId }: CalculatorFormProps) 
 
   const fuelRevenue = baseRevenue * (fuelSurchargePercent / 100);
 
-  const accessorialsCost = values.accessorials.reduce((sum, item) => sum + (Number(item.cost) || 0), 0);
-  const totalTripPrice = baseRevenue + fuelRevenue + chainsFee + miscCharges + accessorialsCost;
+  const accessorialsCost = values.accessorials.reduce((sum, item) => {
+    if (item.isPercentage && item.percentage) {
+      // Calculate based on All-In Trip (excluding accessorials themselves to avoid recursion if any)
+      // Calculate based on All-In Trip (Base + Fuel + Misc + Chains)
+      // "All-In $/Trip" is the Base Price for the Quote
+      const baseForPct = baseRevenue + fuelRevenue + chainsFee + miscCharges;
+      const calculatedCost = baseForPct * (item.percentage / 100);
+      item.cost = parseFloat(calculatedCost.toFixed(2)); // Update the object strictly for display/saving? 
+      // Mutating item here might cause issues if we don't update state, but let's just use the value.
+      return sum + calculatedCost;
+    }
+    return sum + (Number(item.cost) || 0);
+  }, 0);
+
+  // User requested: "Accessorial Charge should NOT get calculated in the ALL-IN $/Trip."
+  // AND "Any additional Accessorial Charges should not increase the ALL trip cost."
+  // This implies the "All-In $/Trip" IS the Quote Total.
+  const totalTripPrice = baseRevenue + fuelRevenue + chainsFee + miscCharges;
+
+
+
+  // We no longer add accessorials to a "Grand Total".
+  // The 'totalCost' saved to DB will constitute the "All-In" price.
+  // Accessorials are saved in the 'accessorials' array and can be summed for display, but distinct from the "Trip Price".
+
+  const grandTotal = totalTripPrice; // For continuity in variable usage where total is needed
 
   const driverTarget = parseFloat(values.driverTarget || "0");
   const ooBiziTarget = parseFloat(values.ooBiziTarget || "0");
@@ -179,13 +245,38 @@ export function CalculatorForm({ lane, selectedClientId }: CalculatorFormProps) 
   const accessorialsDriverPay = values.accessorials.reduce((sum, item) => sum + (Number(item.driverPay) || 0), 0);
   const accessorialsOOBiziPay = values.accessorials.reduce((sum, item) => sum + (Number(item.ooBiziPay) || 0), 0);
 
-  const driverPay = (totalHours * driverTarget) + accessorialsDriverPay;
-  const ooBiziPay = (totalHours * ooBiziTarget) + accessorialsOOBiziPay;
+  const driverBasePay = (totalHours * driverTarget);
+  const ooBiziBasePay = (totalHours * ooBiziTarget);
   const ooOwnPay = totalHours * ooOwnTarget; // User didn't ask for O/O Own Pay accessorials column yet
 
-  const margin = totalTripPrice - driverPay;
+  const driverTotalPay = driverBasePay + accessorialsDriverPay;
+  const ooBiziTotalPay = ooBiziBasePay + accessorialsOOBiziPay;
+
+  const margin = grandTotal - driverTotalPay;
   const hourlyMargin = totalHours > 0 ? margin / totalHours : 0;
-  const ratePerTon = mtPerLoad > 0 ? totalTripPrice / mtPerLoad : 0;
+  const ratePerTon = mtPerLoad > 0 ? grandTotal / mtPerLoad : 0;
+
+  // Equipment management
+  const addEquipment = () => {
+    setValues(prev => ({
+      ...prev,
+      equipment: [...prev.equipment, { id: nanoid(), type: "Trailer", description: "" }]
+    }));
+  };
+
+  const updateEquipment = (id: string, field: keyof EquipmentItem, val: string) => {
+    setValues(prev => ({
+      ...prev,
+      equipment: prev.equipment.map(e => e.id === id ? { ...e, [field]: val } : e)
+    }));
+  };
+
+  const removeEquipment = (id: string) => {
+    setValues(prev => ({
+      ...prev,
+      equipment: prev.equipment.filter(e => e.id !== id)
+    }));
+  };
 
   const handleSave = async (status: string = "Draft") => {
     if (!values.customerName && !values.clientId) {
@@ -199,37 +290,45 @@ export function CalculatorForm({ lane, selectedClientId }: CalculatorFormProps) 
 
     const selectedClient = clients?.find(c => c.id.toString() === values.clientId);
 
+    const quoteData = {
+      laneId: lane?.id ?? editQuote?.laneId ?? null,
+      clientId: values.clientId ? parseInt(values.clientId) : null,
+      customerName: values.customerName || selectedClient?.name || "",
+      status, // Draft, Pending Review, or Approved
+      distance: values.distance,
+      speed: values.speed,
+      loadTime: values.loadTime,
+      unloadTime: values.unloadTime,
+      standbyTime: values.standbyTime,
+      mtPerLoad: values.mtPerLoad,
+      isRoundTrip: values.isRoundTrip,
+      driveRate: values.driveRate,
+      loadRate: values.loadRate,
+      unloadRate: values.unloadRate,
+      fuelSurcharge: values.fuelSurcharge,
+      chainsFee: values.chainsFee,
+      miscCharges: values.miscCharges,
+      miscChargesDescription: values.miscChargesDescription || null,
+      driverTarget: values.driverTarget,
+      ooBiziTarget: values.ooBiziTarget,
+      ooOwnTarget: values.ooOwnTarget,
+      totalHours: totalHours.toFixed(2),
+      totalCost: totalTripPrice.toFixed(2), // totalCost now reflects totalTripPrice (excluding accessorials)
+      ratePerTon: ratePerTon.toFixed(2),
+      originOverride: values.originOverride || null,
+      destinationOverride: values.destinationOverride || null,
+      productOverride: values.productOverride || null,
+      accessorials: values.accessorials,
+      equipment: values.equipment,
+      notes: values.notes || null,
+    };
+
     try {
-      await createQuote.mutateAsync({
-        laneId: lane?.id ?? null,
-        clientId: values.clientId ? parseInt(values.clientId) : null,
-        customerName: values.customerName || selectedClient?.name || "",
-        status, // Draft, Pending Review, or Approved
-        distance: values.distance,
-        speed: values.speed,
-        loadTime: values.loadTime,
-        unloadTime: values.unloadTime,
-        standbyTime: values.standbyTime,
-        mtPerLoad: values.mtPerLoad,
-        isRoundTrip: values.isRoundTrip,
-        driveRate: values.driveRate,
-        loadRate: values.loadRate,
-        unloadRate: values.unloadRate,
-        fuelSurcharge: values.fuelSurcharge,
-        chainsFee: values.chainsFee,
-        miscCharges: values.miscCharges,
-        miscChargesDescription: values.miscChargesDescription || null,
-        driverTarget: values.driverTarget,
-        ooBiziTarget: values.ooBiziTarget,
-        ooOwnTarget: values.ooOwnTarget,
-        totalHours: totalHours.toFixed(2),
-        totalCost: totalTripPrice.toFixed(2),
-        ratePerTon: ratePerTon.toFixed(2),
-        originOverride: values.originOverride || null,
-        destinationOverride: values.destinationOverride || null,
-        accessorials: values.accessorials,
-        notes: values.notes || null,
-      });
+      if (editQuote) {
+        await updateQuote.mutateAsync({ id: editQuote.id, ...quoteData });
+      } else {
+        await createQuote.mutateAsync(quoteData);
+      }
 
       toast({
         title: status === "Pending Review" ? "Quote Submitted" : (status === "Approved" ? "Quote Approved" : "Quote Saved"),
@@ -248,7 +347,7 @@ export function CalculatorForm({ lane, selectedClientId }: CalculatorFormProps) 
 
   const handleExportPDF = () => {
     generateQuotePDF({
-      quote: { ...values, notes: values.notes },
+      quote: { ...values, notes: values.notes, totalCost: totalTripPrice.toFixed(2) }, // Pass totalTripPrice as totalCost
       clientName: clients?.find(c => c.id.toString() === values.clientId)?.name || values.customerName,
       isDraft: true
     });
@@ -289,7 +388,27 @@ export function CalculatorForm({ lane, selectedClientId }: CalculatorFormProps) 
                   <SelectValue>{values.productOverride}</SelectValue>
                 </SelectTrigger>
                 <SelectContent>
-                  {PRODUCT_TYPES.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+                  {products?.map(p => <SelectItem key={p.id} value={p.name}>{p.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex flex-col">
+              <Label className="text-xs text-gray-500 mb-1 block">Equipment</Label>
+              <Select
+                value={values.equipment[0]?.type || "Trailer"}
+                onValueChange={(v) => {
+                  const eq = values.equipment[0];
+                  if (eq) {
+                    updateEquipment(eq.id, "type", v);
+                  }
+                }}
+              >
+                <SelectTrigger className="h-8 w-32 text-xs">
+                  <SelectValue>{values.equipment[0]?.type || "Trailer"}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {vehiclesList?.map(v => <SelectItem key={v.id} value={v.name}>{v.name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -374,7 +493,7 @@ export function CalculatorForm({ lane, selectedClientId }: CalculatorFormProps) 
                 <Input className="h-8 text-right bg-white" type="number" value={values.fuelSurcharge} onChange={(e) => handleChange("fuelSurcharge", e.target.value)} />
               </div>
               <div className="grid grid-cols-2 gap-2 items-center">
-                <Label className="text-xs text-gray-500">Chains Fee ($)</Label>
+                <Label className="text-xs text-gray-500">Misc Fee ($)</Label>
                 <Input className="h-8 text-right bg-white" type="number" value={values.chainsFee} onChange={(e) => handleChange("chainsFee", e.target.value)} />
               </div>
             </div>
@@ -440,11 +559,17 @@ export function CalculatorForm({ lane, selectedClientId }: CalculatorFormProps) 
           </Card>
 
           {/* Accessorials - Spanning 3 cols */}
+
+          {/* Accessorials - Spanning 3 cols */}
           <div className="col-span-1 lg:col-span-3">
             <AccessorialsTable
               charges={values.accessorials}
               onChange={(newCharges) => setValues(prev => ({ ...prev, accessorials: newCharges }))}
             />
+            <div className="flex justify-end mt-2">
+              <span className="text-xs font-bold text-gray-500 uppercase mr-4">Total Accessorials:</span>
+              <span className="text-sm font-mono font-bold">${accessorialsCost.toFixed(2)}</span>
+            </div>
           </div>
         </div>
 
@@ -460,7 +585,7 @@ export function CalculatorForm({ lane, selectedClientId }: CalculatorFormProps) 
           </div>
           <div className="flex items-center gap-2 border-l border-gray-300 pl-6">
             <span className="text-xs font-bold text-gray-500 uppercase">All-in $/Trip:</span>
-            <span className="text-xl font-mono font-bold text-gray-900">${totalTripPrice.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</span>
+            <span className="text-xl font-mono font-bold text-gray-900">${totalTripPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
           </div>
         </div>
 
@@ -469,11 +594,17 @@ export function CalculatorForm({ lane, selectedClientId }: CalculatorFormProps) 
           <div className="bg-white rounded-md border border-gray-200 p-3 space-y-1">
             <div className="flex justify-between text-xs">
               <span className="text-gray-500 font-medium">Company Driver:</span>
-              <span className="font-bold font-mono">${driverPay.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+              <span className="font-bold font-mono">
+                ${driverBasePay.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                {accessorialsDriverPay > 0 && ` + $${accessorialsDriverPay.toLocaleString(undefined, { maximumFractionDigits: 0 })} (Acc)`}
+              </span>
             </div>
             <div className="flex justify-between text-xs">
               <span className="text-gray-500 font-medium">O/O (Bizi Truck):</span>
-              <span className="font-bold font-mono">${ooBiziPay.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+              <span className="font-bold font-mono">
+                ${ooBiziBasePay.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                {accessorialsOOBiziPay > 0 && ` + $${accessorialsOOBiziPay.toLocaleString(undefined, { maximumFractionDigits: 0 })} (Acc)`}
+              </span>
             </div>
             <div className="flex justify-between text-xs">
               <span className="text-gray-500 font-medium">O/O (Own Truck):</span>
@@ -502,7 +633,7 @@ export function CalculatorForm({ lane, selectedClientId }: CalculatorFormProps) 
                 </Button>
                 <Button variant="outline" size="sm" className="h-7 text-xs flex-1" onClick={() => {
                   const subject = encodeURIComponent(`Quote #${lane?.id ?? "New"}`);
-                  const body = encodeURIComponent(`Total: $${totalTripPrice}`);
+                  const body = encodeURIComponent(`Total: $${grandTotal.toFixed(2)}`);
                   window.location.href = `mailto:?subject=${subject}&body=${body}`;
                 }}>Email</Button>
               </div>

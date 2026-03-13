@@ -25,10 +25,13 @@ export function parseLaneRecord(record: any): InsertLane | null {
     // Get values
     const distanceVal = record["dist. 1 way"] || record["Distance"] || record["Distance (1-way)"];
     const rateVal = record["rate $"] || record["Rate $/HR"];
-    const speedVal = record["Speed"];
+    let speedVal = record["Speed"];
+    if (speedVal === undefined || speedVal === null || speedVal === "") {
+        speedVal = "70";
+    }
 
     // Skip rows that don't have valid positive numeric data in key fields
-    if (!isValidNumeric(distanceVal) || !isValidNumeric(rateVal) || !isValidNumeric(speedVal)) {
+    if (!isValidNumeric(distanceVal) || !isValidNumeric(rateVal)) {
         return null;
     }
 
