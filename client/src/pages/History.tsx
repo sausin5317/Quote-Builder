@@ -454,7 +454,7 @@ export default function History() {
                     </div>
                     <div>
                       <span className="text-gray-500 block">Product</span>
-                      <span className="font-medium">{selectedQuote.product}</span>
+                      <span className="font-medium">{selectedQuote.product || selectedQuote.productOverride || "—"}</span>
                     </div>
                     <div className="col-span-2">
                       <span className="text-gray-500 block">Origin</span>
