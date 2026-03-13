@@ -5,9 +5,10 @@ interface GeneratePDFParams {
     quote: QuoteWithLane | any; // Accept QuoteWithLane or FormValues-like object
     clientName?: string;
     isDraft?: boolean;
+    includePaySummary?: boolean; // If true, adds internal pay breakdown (not for customers)
 }
 
-export const generateQuotePDF = ({ quote, clientName, isDraft = false }: GeneratePDFParams) => {
+export const generateQuotePDF = ({ quote, clientName, isDraft = false, includePaySummary = false }: GeneratePDFParams) => {
     const doc = new jsPDF();
 
     // Extract values, handling both DB Quote and Form Values structures
@@ -218,26 +219,28 @@ export const generateQuotePDF = ({ quote, clientName, isDraft = false }: Generat
     const ooBiziTotalPay = (totalHours * ooBiziTarget) + accessorialsOOBiziPay;
     const ooOwnPay = (totalHours * ooOwnTarget);
 
-    if (driverTotalPay > 0 || ooBiziTotalPay > 0 || ooOwnPay > 0) {
+    if (includePaySummary && (driverTotalPay > 0 || ooBiziTotalPay > 0 || ooOwnPay > 0)) {
         yPos += 15;
+        doc.setDrawColor(200, 200, 200);
+        doc.line(15, yPos - 5, 195, yPos - 5);
         doc.setFont("helvetica", "bold");
-        doc.setFontSize(12);
-        doc.setTextColor(0, 0, 0);
-        doc.text("Estimated Pay Summary", 15, yPos);
-        doc.line(15, yPos + 2, 195, yPos + 2);
-        
-        yPos += 10;
+        doc.setFontSize(11);
+        doc.setTextColor(51, 65, 85); // Slate 700
+        doc.text("Internal Pay Summary (Confidential)", 15, yPos);
+        yPos += 8;
+
         doc.setFontSize(10);
         doc.setFont("helvetica", "normal");
-        
+        doc.setTextColor(0, 0, 0);
+
         doc.text("Company Driver:", 15, yPos);
         doc.text(`$${driverTotalPay.toLocaleString(undefined, { maximumFractionDigits: 0 })}`, 195, yPos, { align: "right" });
         yPos += 7;
-        
+
         doc.text("O/O (Bizi Truck):", 15, yPos);
         doc.text(`$${ooBiziTotalPay.toLocaleString(undefined, { maximumFractionDigits: 0 })}`, 195, yPos, { align: "right" });
         yPos += 7;
-        
+
         doc.text("O/O (Own Truck):", 15, yPos);
         doc.text(`$${ooOwnPay.toLocaleString(undefined, { maximumFractionDigits: 0 })}`, 195, yPos, { align: "right" });
     }

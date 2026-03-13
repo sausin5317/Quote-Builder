@@ -549,7 +549,15 @@ export default function History() {
               {selectedQuote && (
                 <div className="flex gap-2 w-full sm:w-auto mr-auto">
                   <Button variant="outline" size="sm" onClick={() => generateQuotePDF({ quote: selectedQuote, isDraft: selectedQuote.status === "Draft" })}>
-                    <FileText className="w-3 h-3 mr-1" /> PDF
+                    <FileText className="w-3 h-3 mr-1" /> Customer PDF
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="border-slate-400 text-slate-700 hover:bg-slate-100"
+                    onClick={() => generateQuotePDF({ quote: selectedQuote, isDraft: selectedQuote.status === "Draft", includePaySummary: true })}
+                  >
+                    <FileText className="w-3 h-3 mr-1" /> Internal PDF
                   </Button>
                   <Button variant="outline" size="sm" onClick={() => {
                     const subject = encodeURIComponent(`Quote #${selectedQuote.id}`);
