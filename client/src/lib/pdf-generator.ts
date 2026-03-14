@@ -248,7 +248,8 @@ export const generateQuotePDF = ({ quote, clientName, isDraft = false, includePa
     // Footer
     doc.setFontSize(8);
     doc.setTextColor(150, 150, 150);
-    doc.text("This quote is valid for 30 days from issuance.", 105, 280, { align: "center" });
+    doc.text("This quote is valid for 30 days from issuance.", 105, 277, { align: "center" });
+    doc.text("sales@bizitransport.com", 105, 283, { align: "center" });
 
     doc.save(`Bizi_Quote_${getValue("id", "Draft")}.pdf`);
 };

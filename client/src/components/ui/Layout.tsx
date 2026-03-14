@@ -84,10 +84,6 @@ export function Layout({ children }: LayoutProps) {
             </div>
           </div>
 
-          <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 mb-4">
-            <h4 className="font-semibold text-blue-900 text-sm">Need Help?</h4>
-            <p className="text-xs text-blue-600 mt-1">Contact support for pricing adjustments.</p>
-          </div>
 
           <Button
             variant="outline"
