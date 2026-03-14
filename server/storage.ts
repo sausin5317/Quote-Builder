@@ -235,9 +235,12 @@ export class DatabaseStorage implements IStorage {
 
     return result.map(({ quotes, lanes }) => ({
       ...quotes,
-      origin: lanes?.origin,
-      destination: lanes?.destination,
-      product: lanes?.product,
+      origin: lanes?.origin ?? quotes.originOverride ?? null,
+      destination: lanes?.destination ?? quotes.destinationOverride ?? null,
+      product: lanes?.product ?? quotes.productOverride ?? null,
+      originOverride: quotes.originOverride,
+      destinationOverride: quotes.destinationOverride,
+      productOverride: quotes.productOverride,
     }));
   }
 
@@ -256,9 +259,12 @@ export class DatabaseStorage implements IStorage {
 
     return result.map(({ quotes, lanes }) => ({
       ...quotes,
-      origin: lanes?.origin,
-      destination: lanes?.destination,
-      product: lanes?.product,
+      origin: lanes?.origin ?? quotes.originOverride ?? null,
+      destination: lanes?.destination ?? quotes.destinationOverride ?? null,
+      product: lanes?.product ?? quotes.productOverride ?? null,
+      originOverride: quotes.originOverride,
+      destinationOverride: quotes.destinationOverride,
+      productOverride: quotes.productOverride,
     }));
   }
 
@@ -271,9 +277,12 @@ export class DatabaseStorage implements IStorage {
 
     return result.map(({ quotes, lanes }) => ({
       ...quotes,
-      origin: lanes?.origin,
-      destination: lanes?.destination,
-      product: lanes?.product,
+      origin: lanes?.origin ?? quotes.originOverride ?? null,
+      destination: lanes?.destination ?? quotes.destinationOverride ?? null,
+      product: lanes?.product ?? quotes.productOverride ?? null,
+      originOverride: quotes.originOverride,
+      destinationOverride: quotes.destinationOverride,
+      productOverride: quotes.productOverride,
     }));
   }
 

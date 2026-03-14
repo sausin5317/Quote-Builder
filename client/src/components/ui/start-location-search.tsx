@@ -24,6 +24,7 @@ export function LocationSearchInput({
     const lastPlaceIdRef = useRef("");
     const onChangeRef = useRef(onChange);
     const setEditRef = useRef(setIsEditing);
+    const placeSelectedRef = useRef(false); // true when gmp-placeselect already fired
 
     // Keep onChange ref fresh
     useEffect(() => { 
@@ -90,27 +91,34 @@ export function LocationSearchInput({
                     picker.classList.add("w-full");
                     picker.addEventListener("gmp-placeselect", async (evt: any) => {
                         console.log("LocationSearchInput: gmp-placeselect fired");
+                        placeSelectedRef.current = true; // mark that a real selection happened
                         await handlePlaceSelect(evt.place);
                     });
                     
-                    // Capture raw typed input on blur if no place is officially selected
+                    // Capture raw typed input on blur ONLY if no Google place was selected
                     picker.addEventListener("focusout", () => {
                         setTimeout(() => {
-                           // Try to access the raw input text from the shadow DOM input or the inputValue property.
+                           if (placeSelectedRef.current) {
+                               // A real place was selected via dropdown — don't overwrite it
+                               placeSelectedRef.current = false;
+                               return;
+                           }
                            const rawVal = picker.inputValue;
                            if (rawVal) {
                                onChangeRef.current(rawVal);
                            }
-                        }, 200);
+                        }, 300);
                     });
                     
-                    // Optional: keep it synced on enter key
+                    // Sync on enter key for manual text entry
                     picker.addEventListener("keydown", (evt: KeyboardEvent) => {
                         if (evt.key === "Enter") {
-                           const rawVal = picker.inputValue;
-                           if (rawVal) {
-                               onChangeRef.current(rawVal);
-                           }
+                            if (!placeSelectedRef.current) {
+                                const rawVal = picker.inputValue;
+                                if (rawVal) {
+                                    onChangeRef.current(rawVal);
+                                }
+                            }
                         }
                     });
 
