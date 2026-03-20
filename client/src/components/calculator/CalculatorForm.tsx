@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { generateQuotePDF } from "@/lib/pdf-generator";
 import { calculateDistance } from "@/lib/map-service";
 import { Lane, InsertQuote, Client, EquipmentItem, Product } from "@shared/schema";
@@ -185,6 +185,21 @@ export function CalculatorForm({ lane, selectedClientId, editQuote }: Calculator
     setValues(prev => ({ ...prev, [key]: value }));
   };
 
+  const handleOriginChange = useCallback((v: string) => {
+    setValues(prev => ({ ...prev, originOverride: v }));
+  }, []);
+
+  const handleDestChange = useCallback((v: string) => {
+    setValues(prev => ({ ...prev, destinationOverride: v }));
+  }, []);
+
+  // Safeguard against Google Maps Web Component state racing with the Save button.
+  // Ensure we always capture exactly what the user sees in the input boxes right now.
+  const getDOMValue = (elementId: string) => {
+    const el = document.getElementById(elementId) as any;
+    return el ? (el.inputValue || el.value || "") : "";
+  };
+
   const distance = parseFloat(values.distance || "0");
   const speed = parseFloat(values.speed || "1");
   const loadTime = parseFloat(values.loadTime || "0");
@@ -290,6 +305,9 @@ export function CalculatorForm({ lane, selectedClientId, editQuote }: Calculator
 
     const selectedClient = clients?.find(c => c.id.toString() === values.clientId);
 
+    const finalOrigin = values.originOverride || getDOMValue("origin-search");
+    const finalDest = values.destinationOverride || getDOMValue("destination-search");
+
     const quoteData = {
       laneId: lane?.id ?? editQuote?.laneId ?? null,
       clientId: values.clientId ? parseInt(values.clientId) : null,
@@ -315,8 +333,8 @@ export function CalculatorForm({ lane, selectedClientId, editQuote }: Calculator
       totalHours: totalHours.toFixed(2),
       totalCost: totalTripPrice.toFixed(2), // totalCost now reflects totalTripPrice (excluding accessorials)
       ratePerTon: ratePerTon.toFixed(2),
-      originOverride: values.originOverride || null,
-      destinationOverride: values.destinationOverride || null,
+      originOverride: finalOrigin || null,
+      destinationOverride: finalDest || null,
       productOverride: values.productOverride || null,
       accessorials: values.accessorials,
       equipment: values.equipment,
@@ -347,7 +365,13 @@ export function CalculatorForm({ lane, selectedClientId, editQuote }: Calculator
 
   const handleExportPDF = () => {
     generateQuotePDF({
-      quote: { ...values, notes: values.notes, totalCost: totalTripPrice.toFixed(2) }, // Pass totalTripPrice as totalCost
+      quote: { 
+          ...values, 
+          originOverride: values.originOverride || getDOMValue("origin-search") || null,
+          destinationOverride: values.destinationOverride || getDOMValue("destination-search") || null,
+          notes: values.notes, 
+          totalCost: totalTripPrice.toFixed(2) 
+      }, // Pass totalTripPrice as totalCost
       clientName: clients?.find(c => c.id.toString() === values.clientId)?.name || values.customerName,
       isDraft: true
     });
@@ -362,8 +386,9 @@ export function CalculatorForm({ lane, selectedClientId, editQuote }: Calculator
             <div className="flex-1 min-w-[200px]">
               <Label className="text-xs text-gray-500 mb-1 block">Origin</Label>
               <LocationSearchInput
+                id="origin-search"
                 value={values.originOverride}
-                onChange={(v) => handleChange("originOverride", v)}
+                onChange={handleOriginChange}
                 placeholder="Search Origin..."
                 className="h-8 text-sm"
               />
@@ -372,8 +397,9 @@ export function CalculatorForm({ lane, selectedClientId, editQuote }: Calculator
             <div className="flex-1 min-w-[200px]">
               <Label className="text-xs text-gray-500 mb-1 block">Destination</Label>
               <LocationSearchInput
+                id="destination-search"
                 value={values.destinationOverride}
-                onChange={(v) => handleChange("destinationOverride", v)}
+                onChange={handleDestChange}
                 placeholder="Search Destination..."
                 className="h-8 text-sm"
               />

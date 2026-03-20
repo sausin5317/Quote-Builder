@@ -1,0 +1,124 @@
+﻿diff --git a/client/src/components/calculator/CalculatorForm.tsx b/client/src/components/calculator/CalculatorForm.tsx
+index f1b3159..f9781c4 100644
+--- a/client/src/components/calculator/CalculatorForm.tsx
++++ b/client/src/components/calculator/CalculatorForm.tsx
+@@ -185,6 +185,13 @@ export function CalculatorForm({ lane, selectedClientId, editQuote }: Calculator
+     setValues(prev => ({ ...prev, [key]: value }));
+   };
+ 
++  // Safeguard against Google Maps Web Component state racing with the Save button.
++  // Ensure we always capture exactly what the user sees in the input boxes right now.
++  const getDOMValue = (elementId: string) => {
++    const el = document.getElementById(elementId) as any;
++    return el ? (el.inputValue || el.value || "") : "";
++  };
++
+   const distance = parseFloat(values.distance || "0");
+   const speed = parseFloat(values.speed || "1");
+   const loadTime = parseFloat(values.loadTime || "0");
+@@ -290,6 +297,9 @@ export function CalculatorForm({ lane, selectedClientId, editQuote }: Calculator
+ 
+     const selectedClient = clients?.find(c => c.id.toString() === values.clientId);
+ 
++    const finalOrigin = values.originOverride || getDOMValue("origin-search");
++    const finalDest = values.destinationOverride || getDOMValue("destination-search");
++
+     const quoteData = {
+       laneId: lane?.id ?? editQuote?.laneId ?? null,
+       clientId: values.clientId ? parseInt(values.clientId) : null,
+@@ -315,8 +325,8 @@ export function CalculatorForm({ lane, selectedClientId, editQuote }: Calculator
+       totalHours: totalHours.toFixed(2),
+       totalCost: totalTripPrice.toFixed(2), // totalCost now reflects totalTripPrice (excluding accessorials)
+       ratePerTon: ratePerTon.toFixed(2),
+-      originOverride: values.originOverride || null,
+-      destinationOverride: values.destinationOverride || null,
++      originOverride: finalOrigin || null,
++      destinationOverride: finalDest || null,
+       productOverride: values.productOverride || null,
+       accessorials: values.accessorials,
+       equipment: values.equipment,
+@@ -347,7 +357,13 @@ export function CalculatorForm({ lane, selectedClientId, editQuote }: Calculator
+ 
+   const handleExportPDF = () => {
+     generateQuotePDF({
+-      quote: { ...values, notes: values.notes, totalCost: totalTripPrice.toFixed(2) }, // Pass totalTripPrice as totalCost
++      quote: { 
++          ...values, 
++          originOverride: values.originOverride || getDOMValue("origin-search") || null,
++          destinationOverride: values.destinationOverride || getDOMValue("destination-search") || null,
++          notes: values.notes, 
++          totalCost: totalTripPrice.toFixed(2) 
++      }, // Pass totalTripPrice as totalCost
+       clientName: clients?.find(c => c.id.toString() === values.clientId)?.name || values.customerName,
+       isDraft: true
+     });
+@@ -362,6 +378,7 @@ export function CalculatorForm({ lane, selectedClientId, editQuote }: Calculator
+             <div className="flex-1 min-w-[200px]">
+               <Label className="text-xs text-gray-500 mb-1 block">Origin</Label>
+               <LocationSearchInput
++                id="origin-search"
+                 value={values.originOverride}
+                 onChange={(v) => handleChange("originOverride", v)}
+                 placeholder="Search Origin..."
+@@ -372,6 +389,7 @@ export function CalculatorForm({ lane, selectedClientId, editQuote }: Calculator
+             <div className="flex-1 min-w-[200px]">
+               <Label className="text-xs text-gray-500 mb-1 block">Destination</Label>
+               <LocationSearchInput
++                id="destination-search"
+                 value={values.destinationOverride}
+                 onChange={(v) => handleChange("destinationOverride", v)}
+                 placeholder="Search Destination..."
+diff --git a/client/src/components/ui/start-location-search.tsx b/client/src/components/ui/start-location-search.tsx
+index 81e5c2e..f8cd53e 100644
+--- a/client/src/components/ui/start-location-search.tsx
++++ b/client/src/components/ui/start-location-search.tsx
+@@ -9,6 +9,7 @@ interface LocationSearchInputProps {
+     onChange: (value: string) => void;
+     placeholder?: string;
+     className?: string;
++    id?: string;
+ }
+ 
+ export function LocationSearchInput({
+@@ -16,6 +17,7 @@ export function LocationSearchInput({
+     onChange,
+     placeholder = "Search location...",
+     className,
++    id,
+ }: LocationSearchInputProps) {
+     const [isEditing, setIsEditing] = useState(!value);
+     const containerRef = useRef<HTMLDivElement>(null);
+@@ -87,6 +89,7 @@ export function LocationSearchInput({
+ 
+                 if (!pickerRef.current) {
+                     const picker = new Ctor();
++                    if (id) picker.id = id;
+                     picker.placeholder = placeholder;
+                     picker.classList.add("w-full");
+                     picker.addEventListener("gmp-placeselect", async (evt: any) => {
+@@ -130,7 +133,6 @@ export function LocationSearchInput({
+                     containerRef.current &&
+                     !containerRef.current.contains(pickerRef.current)
+                 ) {
+-                    containerRef.current.innerHTML = "";
+                     containerRef.current.appendChild(pickerRef.current);
+                     console.log("LocationSearchInput: Picker attached");
+                 }
+@@ -170,6 +172,7 @@ export function LocationSearchInput({
+         return (
+             <div className={cn("relative flex items-center gap-2", className)}>
+                 <Input
++                    id={id}
+                     value={value}
+                     readOnly
+                     className="pr-8 bg-gray-50 focus-visible:ring-0 cursor-default"
+@@ -189,8 +192,6 @@ export function LocationSearchInput({
+ 
+     // Edit mode
+     return (
+-        <div ref={containerRef} className={cn("w-full min-h-[40px] border rounded-md", className)}>
+-            <div className="p-2 text-xs text-gray-400">Loading Google Maps...</div>
+-        </div>
++        <div ref={containerRef} className={cn("w-full min-h-[40px] border rounded-md", className)} />
+     );
+ }
